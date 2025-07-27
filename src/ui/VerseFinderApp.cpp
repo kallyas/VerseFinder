@@ -2,6 +2,9 @@
 #include <iostream>
 #include <filesystem>
 #include <algorithm>
+#include <regex>
+#include <ctime>
+#include <cstdlib>
 #include <mach-o/dyld.h>
 #include <thread>
 #include <future>
@@ -144,6 +147,9 @@ bool VerseFinderApp::init() {
     std::string translations_path = getExecutablePath() + "/translations";
     bible.setTranslationsDirectory(translations_path);
     bible.loadAllTranslations();
+    
+    // Scan for existing translation files and update status
+    scanForExistingTranslations();
     updateAvailableTranslationStatus();
     loadSettings();
     
@@ -289,6 +295,7 @@ void VerseFinderApp::run() {
             }
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Auto Search", nullptr, &auto_search);
+                ImGui::MenuItem("Performance Stats", nullptr, &show_performance_stats);
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help")) {
@@ -323,6 +330,10 @@ void VerseFinderApp::run() {
         
         if (show_help_window) {
             renderHelpWindow();
+        }
+        
+        if (show_performance_stats) {
+            renderPerformanceWindow();
         }
         
         // Rendering
@@ -426,7 +437,14 @@ void VerseFinderApp::renderSearchResults() {
         return;
     }
     
-    ImGui::Text("📋 Results (%d found)", (int)search_results.size());
+    // Show different headers based on search type
+    if (is_viewing_chapter) {
+        ImGui::Text("📖 %s Chapter %d (%d verses)", 
+                   current_chapter_book.c_str(), current_chapter_number, (int)search_results.size());
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Click any verse to jump to it");
+    } else {
+        ImGui::Text("📋 Results (%d found)", (int)search_results.size());
+    }
     ImGui::Separator();
     
     // Results list with scrolling
@@ -448,39 +466,66 @@ void VerseFinderApp::renderSearchResults() {
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.3f, 0.5f, 0.8f, 0.3f));
         }
         
-        ImGui::BeginChild(("result_" + std::to_string(i)).c_str(), ImVec2(0, 80), true);
+        // Different layout for chapter viewing vs search results
+        float child_height = is_viewing_chapter ? 60.0f : 80.0f;
+        ImGui::BeginChild(("result_" + std::to_string(i)).c_str(), ImVec2(0, child_height), true);
         
-        // Reference in blue
-        ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
-        
-        // Verse text with word wrapping
-        ImGui::PushTextWrapPos(0.0f);
-        
-        // Highlight search terms in verse text
-        std::string display_text = verse_text;
-        if (display_text.length() > 150) {
-            display_text = display_text.substr(0, 147) + "...";
-        }
-        
-        // Simple highlighting with case-insensitive search
-        bool should_highlight = false;
-        if (strlen(search_input) > 0) {
-            std::string lower_search = search_input;
-            std::string lower_display = display_text;
-            std::transform(lower_search.begin(), lower_search.end(), lower_search.begin(),
-                          [](unsigned char c){ return std::tolower(c); });
-            std::transform(lower_display.begin(), lower_display.end(), lower_display.begin(),
-                          [](unsigned char c){ return std::tolower(c); });
-            should_highlight = lower_display.find(lower_search) != std::string::npos;
-        }
-        
-        if (should_highlight) {
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%s", display_text.c_str());
+        if (is_viewing_chapter) {
+            // Extract verse number for chapter viewing
+            size_t last_colon = reference.find_last_of(':');
+            std::string verse_num = (last_colon != std::string::npos) ? 
+                                   reference.substr(last_colon + 1) : std::to_string(i + 1);
+            
+            // Show verse number prominently and make it clickable
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.3f, 0.7f, 1.0f));
+            
+            if (ImGui::Button(("v" + verse_num).c_str(), ImVec2(40, 0))) {
+                // Jump to this specific verse
+                std::string book;
+                int chapter, verse;
+                if (bible.parseReference(reference, book, chapter, verse)) {
+                    jumpToVerse(book, chapter, verse);
+                }
+            }
+            ImGui::PopStyleColor(3);
+            
+            ImGui::SameLine();
+            ImGui::Text("%s", verse_text.c_str());
         } else {
-            ImGui::Text("%s", display_text.c_str());
+            // Regular search result display
+            ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
+            
+            // Verse text with word wrapping
+            ImGui::PushTextWrapPos(0.0f);
+            
+            // Highlight search terms in verse text
+            std::string display_text = verse_text;
+            if (display_text.length() > 150) {
+                display_text = display_text.substr(0, 147) + "...";
+            }
+            
+            // Simple highlighting with case-insensitive search
+            bool should_highlight = false;
+            if (strlen(search_input) > 0) {
+                std::string lower_search = search_input;
+                std::string lower_display = display_text;
+                std::transform(lower_search.begin(), lower_search.end(), lower_search.begin(),
+                              [](unsigned char c){ return std::tolower(c); });
+                std::transform(lower_display.begin(), lower_display.end(), lower_display.begin(),
+                              [](unsigned char c){ return std::tolower(c); });
+                should_highlight = lower_display.find(lower_search) != std::string::npos;
+            }
+            
+            if (should_highlight) {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%s", display_text.c_str());
+            } else {
+                ImGui::Text("%s", display_text.c_str());
+            }
+            
+            ImGui::PopTextWrapPos();
         }
-        
-        ImGui::PopTextWrapPos();
         
         // Click to select/view
         if (ImGui::IsItemClicked()) {
@@ -560,6 +605,11 @@ void VerseFinderApp::renderStatusBar() {
             if (selected_result_index >= 0) {
                 ImGui::Text("👆 Selected: %d", selected_result_index + 1);
             }
+        }
+        
+        // Performance information
+        if (last_search_time_ms > 0.0) {
+            ImGui::Text("⚡ Search: %.2f ms", last_search_time_ms);
         }
     } else {
         ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "⏳ Loading Bible data...");
@@ -740,6 +790,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 
                 ImGui::BulletText("Ctrl+K - Clear search");
                 ImGui::BulletText("Ctrl+C - Copy selected verse");
+                ImGui::BulletText("Ctrl+P - Performance statistics");
                 ImGui::BulletText("Ctrl+, - Open settings");
                 ImGui::BulletText("F1 - Show help");
                 ImGui::BulletText("Enter - Search");
@@ -822,12 +873,106 @@ void VerseFinderApp::renderHelpWindow() {
         ImGui::Separator();
         ImGui::BulletText("Ctrl+K - Clear search");
         ImGui::BulletText("Ctrl+C - Copy verse");
+        ImGui::BulletText("Ctrl+P - Performance stats");
         ImGui::BulletText("Enter - Search");
         ImGui::BulletText("F1 - This help");
         
         ImGui::Separator();
         if (ImGui::Button("❌ Close", ImVec2(-1, 0))) {
             show_help_window = false;
+        }
+    }
+    ImGui::End();
+}
+
+void VerseFinderApp::renderPerformanceWindow() {
+    ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
+    
+    if (ImGui::Begin("⚡ Performance Statistics", &show_performance_stats)) {
+        ImGui::Text("🔍 Search Performance");
+        ImGui::Separator();
+        
+        // Current search timing
+        if (last_search_time_ms > 0.0) {
+            ImGui::Text("Last Search Time: %.2f ms", last_search_time_ms);
+            
+            // Color-code performance
+            ImVec4 color = ImVec4(0.3f, 0.8f, 0.3f, 1.0f); // Green
+            if (last_search_time_ms > 50.0) {
+                color = ImVec4(1.0f, 0.8f, 0.3f, 1.0f); // Yellow
+            }
+            if (last_search_time_ms > 100.0) {
+                color = ImVec4(0.8f, 0.4f, 0.4f, 1.0f); // Red
+            }
+            
+            ImGui::SameLine();
+            ImGui::TextColored(color, "(Target: <50ms)");
+        } else {
+            ImGui::Text("No searches performed yet");
+        }
+        
+        ImGui::Spacing();
+        ImGui::Text("📊 Cache Statistics");
+        ImGui::Separator();
+        
+        // Get cache statistics from VerseFinder
+        if (bible.isReady()) {
+            // We need to print the performance stats which includes cache info
+            std::string cache_info = "Cache information available in console";
+            ImGui::Text("%s", cache_info.c_str());
+            
+            if (ImGui::Button("🖨️ Print Full Stats to Console")) {
+                bible.printPerformanceStats();
+            }
+            
+            ImGui::Spacing();
+            ImGui::Text("💾 Memory & System");
+            ImGui::Separator();
+            
+            // Memory usage (if available)
+            size_t memory_kb = PerformanceBenchmark::getCurrentMemoryUsage();
+            if (memory_kb > 0) {
+                ImGui::Text("Memory Usage: %.2f MB", memory_kb / 1024.0);
+            } else {
+                ImGui::Text("Memory Usage: Unable to determine");
+            }
+            
+            ImGui::Spacing();
+            ImGui::Text("🎯 Performance Targets");
+            ImGui::Separator();
+            
+            ImGui::BulletText("Reference Search: < 5ms");
+            ImGui::BulletText("Simple Keyword Search: < 20ms");
+            ImGui::BulletText("Complex Multi-word Search: < 50ms");
+            ImGui::BulletText("Cache Hit Rate: > 80%%");
+            
+            ImGui::Spacing();
+            ImGui::Text("⚙️ Cache Management");
+            ImGui::Separator();
+            
+            if (ImGui::Button("🗑️ Clear Search Cache")) {
+                bible.clearSearchCache();
+                ImGui::OpenPopup("Cache Cleared");
+            }
+            
+            if (ImGui::BeginPopupModal("Cache Cleared", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("Search cache has been cleared.");
+                ImGui::Separator();
+                if (ImGui::Button("OK", ImVec2(120, 0))) {
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+            
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "⏳ Bible data still loading...");
+        }
+        
+        ImGui::Spacing();
+        ImGui::Separator();
+        
+        if (ImGui::Button("❌ Close", ImVec2(-1, 0))) {
+            show_performance_stats = false;
         }
     }
     ImGui::End();
@@ -856,12 +1001,18 @@ void VerseFinderApp::handleKeyboardShortcuts() {
         show_help_window = true;
     }
     
+    // Ctrl+P - Performance stats
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_P))) {
+        show_performance_stats = !show_performance_stats;
+    }
+    
     // Escape - Close modals
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
         show_verse_modal = false;
         show_settings_window = false;
         show_about_window = false;
         show_help_window = false;
+        show_performance_stats = false;
     }
 }
 
@@ -870,23 +1021,54 @@ void VerseFinderApp::performSearch() {
         search_results.clear();
         selected_result_index = -1;
         selected_verse_text.clear();
+        last_search_time_ms = 0.0;
         return;
     }
     
     std::string query = search_input;
     
-    // Try keyword search first
-    search_results = bible.searchByKeywords(query, current_translation.name);
+    // Benchmark the search operation
+    auto start_time = std::chrono::steady_clock::now();
     
-    // If no results, try reference search
-    if (search_results.empty() || (search_results.size() == 1 && search_results[0].find("No matching verses") != std::string::npos)) {
+    // Determine search type based on query format
+    bool is_reference_format = false;
+    
+    // Check if query looks like a reference (contains numbers and potentially colons)
+    std::regex reference_pattern(R"(^[a-zA-Z0-9\s]+\s+\d+(:?\d+)?$)");
+    if (std::regex_match(query, reference_pattern)) {
+        is_reference_format = true;
+    }
+    
+    if (is_reference_format) {
+        // Try exact verse reference first
         std::string ref_result = bible.searchByReference(query, current_translation.name);
         if (ref_result != "Verse not found." && ref_result != "Bible is loading...") {
             search_results = {query + ": " + ref_result};
+            is_viewing_chapter = false;
         } else {
-            search_results.clear();
+            // Try chapter search (e.g., "Hebrews 12")
+            search_results = bible.searchByChapter(query, current_translation.name);
+            
+            // Check if this is a chapter search
+            std::string book;
+            int chapter, verse;
+            if (bible.parseReference(query, book, chapter, verse) && chapter != -1 && verse == -1) {
+                is_viewing_chapter = true;
+                current_chapter_book = bible.normalizeBookName(book);
+                current_chapter_number = chapter;
+            } else {
+                is_viewing_chapter = false;
+            }
         }
+    } else {
+        // Use full text search for phrases and keywords
+        search_results = bible.searchByKeywords(query, current_translation.name);
+        is_viewing_chapter = false;
     }
+    
+    auto end_time = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    last_search_time_ms = duration.count() / 1000.0;
     
     selected_result_index = search_results.empty() ? -1 : 0;
     if (selected_result_index >= 0) {
@@ -902,6 +1084,7 @@ void VerseFinderApp::clearSearch() {
     selected_result_index = -1;
     selected_verse_text.clear();
     last_search_query.clear();
+    last_search_time_ms = 0.0;
 }
 
 void VerseFinderApp::selectResult(int index) {
@@ -942,6 +1125,26 @@ void VerseFinderApp::navigateToVerse(int direction) {
     }
 }
 
+void VerseFinderApp::jumpToVerse(const std::string& book, int chapter, int verse) {
+    // Create the verse reference
+    std::string reference = book + " " + std::to_string(chapter) + ":" + std::to_string(verse);
+    
+    // Search for this specific verse
+    std::string result = bible.searchByReference(reference, current_translation.name);
+    
+    if (result != "Verse not found." && result != "Bible is loading...") {
+        // Clear current search and show just this verse
+        search_results = {reference + ": " + result};
+        selected_result_index = 0;
+        selected_verse_text = search_results[0];
+        is_viewing_chapter = false;
+        
+        // Update search input to show the reference
+        strncpy(search_input, reference.c_str(), sizeof(search_input) - 1);
+        search_input[sizeof(search_input) - 1] = '\0';
+    }
+}
+
 void VerseFinderApp::downloadTranslation(const std::string& url, const std::string& name) {
     // Mark as downloading
     for (auto& trans : available_translations) {
@@ -967,55 +1170,59 @@ void VerseFinderApp::downloadTranslation(const std::string& url, const std::stri
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
         
-        // TODO: Implement actual HTTP download
-        // For now, create a more comprehensive sample translation
-        std::string sample_json = R"({
-          "translation": ")" + name + R"(",
-          "abbreviation": ")" + name.substr(0, 3) + R"(",
-          "books": [
-            {
-              "name": "Genesis",
-              "chapters": [
-                {
-                  "chapter": 1,
-                  "verses": [
-                    {
-                      "verse": 1,
-                      "text": "In the beginning God created the heavens and the earth."
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "name": "John",
-              "chapters": [
-                {
-                  "chapter": 3,
-                  "verses": [
-                    {
-                      "verse": 16,
-                      "text": "For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life."
-                    },
-                    {
-                      "verse": 17,
-                      "text": "For God did not send his Son into the world to condemn the world, but to save the world through him."
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        })";
-        
         try {
-            // Save translation to file
-            std::string filename = name + ".json";
-            // Replace spaces with underscores for filename
-            std::replace(filename.begin(), filename.end(), ' ', '_');
+            // Get the correct filename based on URL and translation name
+            std::string filename = extractFilenameFromUrl(url, name);
             
-            if (bible.saveTranslation(sample_json, filename)) {
-                bible.addTranslation(sample_json);
+            // Try to find existing translation file in common locations first
+            std::vector<std::string> search_paths = {
+                getExecutablePath() + "/translations/" + filename,
+                getExecutablePath() + "/" + filename,
+                getExecutablePath() + "/data/" + filename,
+                "./translations/" + filename,
+                "./" + filename
+            };
+            
+            std::string translation_content;
+            bool found_existing = false;
+            
+            for (const auto& path : search_paths) {
+                std::ifstream file(path);
+                if (file.is_open()) {
+                    std::stringstream buffer;
+                    buffer << file.rdbuf();
+                    translation_content = buffer.str();
+                    found_existing = true;
+                    std::cout << "Found existing translation at: " << path << std::endl;
+                    break;
+                }
+            }
+            
+            if (!found_existing) {
+                // Download from the provided URL
+                std::cout << "Downloading translation from: " << url << std::endl;
+                translation_content = downloadFromUrl(url);
+                
+                if (translation_content.empty()) {
+                    throw std::runtime_error("Failed to download translation from URL: " + url);
+                }
+                
+                std::cout << "Successfully downloaded " << name << " (" << translation_content.length() << " bytes)" << std::endl;
+            }
+            
+            // Validate JSON format
+            try {
+                json test_parse = json::parse(translation_content);
+                if (!test_parse.contains("translation") || !test_parse.contains("books")) {
+                    throw std::runtime_error("Invalid Bible JSON format");
+                }
+            } catch (const json::exception& e) {
+                throw std::runtime_error("Failed to parse translation JSON: " + std::string(e.what()));
+            }
+            
+            // Save to translations directory and add to Bible
+            if (bible.saveTranslation(translation_content, filename)) {
+                bible.addTranslation(translation_content);
                 
                 // Mark as completed
                 for (auto& trans : available_translations) {
@@ -1094,6 +1301,140 @@ bool VerseFinderApp::loadSettings() {
     // Implementation would load settings from a file
     std::cout << "Settings loaded" << std::endl;
     return true;
+}
+
+std::string VerseFinderApp::getTranslationFilename(const std::string& translation_name) const {
+    // Map translation names to expected filenames
+    std::unordered_map<std::string, std::string> name_to_filename = {
+        {"King James Version", "King_James_Version.json"},
+        {"New International Version", "New_International_Version.json"},
+        {"English Standard Version", "English_Standard_Version.json"},
+        {"New Living Translation", "New_Living_Translation.json"},
+        {"American Standard Version", "American_Standard_Version.json"},
+        {"World English Bible", "World_English_Bible.json"},
+        {"New King James Version", "New_King_James_Version.json"},
+        {"The Message", "The_Message.json"}
+    };
+    
+    auto it = name_to_filename.find(translation_name);
+    if (it != name_to_filename.end()) {
+        return it->second;
+    }
+    
+    // Fallback: convert name to filename format
+    std::string filename = translation_name + ".json";
+    std::replace(filename.begin(), filename.end(), ' ', '_');
+    return filename;
+}
+
+void VerseFinderApp::scanForExistingTranslations() {
+    // Common search paths for translation files
+    std::vector<std::string> search_directories = {
+        getExecutablePath() + "/translations/",
+        getExecutablePath() + "/",
+        getExecutablePath() + "/data/",
+        "./translations/",
+        "./"
+    };
+    
+    for (auto& available : available_translations) {
+        if (!available.is_downloading) {
+            available.is_downloaded = false;
+            
+            std::string expected_filename = getTranslationFilename(available.name);
+            
+            // Check if file exists in any of the search directories
+            for (const auto& dir : search_directories) {
+                std::string full_path = dir + expected_filename;
+                std::ifstream file(full_path);
+                if (file.is_open()) {
+                    // Read and load the translation
+                    std::stringstream buffer;
+                    buffer << file.rdbuf();
+                    std::string content = buffer.str();
+                    file.close();
+                    
+                    try {
+                        // Validate JSON format before loading
+                        json test_parse = json::parse(content);
+                        if (test_parse.contains("translation") && test_parse.contains("books")) {
+                            bible.addTranslation(content);
+                            available.is_downloaded = true;
+                            std::cout << "Loaded existing translation: " << available.name 
+                                      << " from " << full_path << std::endl;
+                        } else {
+                            std::cout << "Invalid format for translation file: " << full_path << std::endl;
+                        }
+                    } catch (const json::exception& e) {
+                        std::cout << "Failed to parse translation file " << full_path 
+                                  << ": " << e.what() << std::endl;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+std::string VerseFinderApp::downloadFromUrl(const std::string& url) const {
+    // Create a temporary file for the download
+    std::string temp_file = "/tmp/bible_download_" + std::to_string(std::time(nullptr)) + ".json";
+    
+    // Use curl to download the file
+    std::string curl_command = "curl -s -L -f \"" + url + "\" -o \"" + temp_file + "\"";
+    
+    std::cout << "Downloading from: " << url << std::endl;
+    
+    int result = system(curl_command.c_str());
+    if (result != 0) {
+        std::cerr << "Failed to download from URL: " << url << std::endl;
+        return "";
+    }
+    
+    // Read the downloaded file
+    std::ifstream file(temp_file);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open downloaded file: " << temp_file << std::endl;
+        return "";
+    }
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string content = buffer.str();
+    file.close();
+    
+    // Clean up temporary file
+    std::remove(temp_file.c_str());
+    
+    return content;
+}
+
+std::string VerseFinderApp::extractFilenameFromUrl(const std::string& url, const std::string& translation_name) const {
+    // Map URL patterns to proper filenames
+    std::unordered_map<std::string, std::string> url_to_filename = {
+        {"kjv.json", "King_James_Version.json"},
+        {"niv.json", "New_International_Version.json"},
+        {"esv.json", "English_Standard_Version.json"},
+        {"nlt.json", "New_Living_Translation.json"},
+        {"asv.json", "American_Standard_Version.json"},
+        {"web.json", "World_English_Bible.json"},
+        {"nkjv.json", "New_King_James_Version.json"},
+        {"msg.json", "The_Message.json"}
+    };
+    
+    // Extract the last part of the URL (e.g., "niv.json" from "https://api.getbible.net/v2/niv.json")
+    size_t last_slash = url.find_last_of('/');
+    if (last_slash != std::string::npos && last_slash < url.length() - 1) {
+        std::string url_filename = url.substr(last_slash + 1);
+        
+        auto it = url_to_filename.find(url_filename);
+        if (it != url_to_filename.end()) {
+            return it->second;
+        }
+    }
+    
+    // Fallback to using translation name
+    return getTranslationFilename(translation_name);
 }
 
 void VerseFinderApp::cleanup() {

@@ -27,6 +27,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <chrono>
 
 enum class UIScreen {
     MAIN,
@@ -59,6 +60,15 @@ private:
     std::string selected_verse_text;
     std::string last_search_query;
     bool auto_search = true;
+    
+    // Chapter viewing state
+    bool is_viewing_chapter = false;
+    std::string current_chapter_book;
+    int current_chapter_number = -1;
+    
+    // Performance monitoring
+    double last_search_time_ms = 0.0;
+    bool show_performance_stats = false;
     
     // UI state
     bool show_verse_modal = false;
@@ -102,6 +112,7 @@ private:
     void renderSettingsWindow();
     void renderAboutWindow();
     void renderHelpWindow();
+    void renderPerformanceWindow();
     
     // Utility methods
     void performSearch();
@@ -111,12 +122,19 @@ private:
     std::string formatVerseReference(const std::string& verse_text);
     std::string formatVerseText(const std::string& verse_text);
     void navigateToVerse(int direction);  // Navigate to next/previous verse
+    void jumpToVerse(const std::string& book, int chapter, int verse);  // Jump to specific verse
     
     // Translation management
     void downloadTranslation(const std::string& url, const std::string& name);
     void updateAvailableTranslationStatus();
     void switchToTranslation(const std::string& translation_name);
     bool isTranslationAvailable(const std::string& name) const;
+    std::string getTranslationFilename(const std::string& translation_name) const;
+    void scanForExistingTranslations();
+    
+    // HTTP download utilities
+    std::string downloadFromUrl(const std::string& url) const;
+    std::string extractFilenameFromUrl(const std::string& url, const std::string& translation_name) const;
     
     // Event handling
     static void glfwErrorCallback(int error, const char* description);

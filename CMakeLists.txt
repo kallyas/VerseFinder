@@ -184,6 +184,9 @@ endif()
 add_executable(VerseFinder
     src/main.cpp
     src/core/VerseFinder.cpp
+    src/core/SearchCache.cpp
+    src/core/SearchOptimizer.cpp
+    src/core/PerformanceBenchmark.cpp
     src/ui/VerseFinderApp.cpp
     ${IMGUI_SOURCES}
 )

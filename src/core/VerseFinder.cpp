@@ -2,11 +2,15 @@
 #include "VerseFinder.h"
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <thread>
 #include <filesystem>
+#include <set>
+#include <future>
+#include <mutex>
 
-VerseFinder::VerseFinder() {
+VerseFinder::VerseFinder() : benchmark(&g_benchmark) {
     book_aliases = {
         {"St. John", "John"},
         {"Saint John", "John"},
@@ -50,7 +54,8 @@ void VerseFinder::loadBibleInternal(const std::string& filename) {
                 };
                 std::string key = makeKey(v.book, v.chapter, v.verse);
                 verses[trans_name][key] = v;
-                for (const auto& token : tokenize(v.text)) {
+                // Use optimized tokenization
+                for (const auto& token : SearchOptimizer::optimizedTokenize(v.text)) {
                     keyword_index[trans_name][token].push_back(key);
                 }
             }
@@ -81,7 +86,29 @@ std::string VerseFinder::normalizeBookName(const std::string& book) const {
         }
     }
     
-    // If no alias found, return the original book name
+    // If no alias match, try case-insensitive match against actual book names in loaded data
+    if (!verses.empty()) {
+        const auto& first_translation = verses.begin()->second;
+        
+        // Collect unique book names from the loaded data
+        std::set<std::string> book_names;
+        for (const auto& verse_pair : first_translation) {
+            const Verse& v = verse_pair.second;
+            book_names.insert(v.book);
+        }
+        
+        // Try case-insensitive match against actual book names
+        for (const std::string& actual_book : book_names) {
+            std::string lower_actual = actual_book;
+            std::transform(lower_actual.begin(), lower_actual.end(), lower_actual.begin(),
+                           [](unsigned char c){ return std::tolower(c); });
+            if (lower_actual == lower_book) {
+                return actual_book; // Return the correctly cased book name
+            }
+        }
+    }
+    
+    // If no match found, return the original book name
     return book;
 }
 
@@ -131,6 +158,8 @@ std::vector<std::string> VerseFinder::tokenize(const std::string& text) {
 std::string VerseFinder::searchByReference(const std::string& reference, const std::string& translation) const {
     if (!isReady()) return "Bible is loading...";
     
+    BENCHMARK_SCOPE("reference_search");
+    
     // Normalize the reference for case-insensitive lookup
     std::string normalized_ref = normalizeReference(reference);
     
@@ -146,7 +175,26 @@ std::string VerseFinder::searchByReference(const std::string& reference, const s
 
 std::vector<std::string> VerseFinder::searchByKeywords(const std::string& query, const std::string& translation) const {
     if (!isReady()) return {"Bible is loading..."};
-    auto tokens = tokenize(query);
+    
+    // Check cache first
+    std::vector<std::string> cached_results;
+    if (search_cache.get(query, translation, cached_results)) {
+        return cached_results;
+    }
+    
+    // Use full text search instead of keyword intersection for better results
+    std::vector<std::string> results = searchByFullText(query, translation);
+    
+    // Cache the results
+    search_cache.put(query, translation, results);
+    
+    return results;
+}
+
+std::vector<std::string> VerseFinder::searchByKeywordsOptimized(const std::string& query, const std::string& translation) const {
+    BENCHMARK_SCOPE("keyword_search");
+    
+    auto tokens = SearchOptimizer::optimizedTokenize(query);
     if (tokens.empty()) return {"No keywords provided."};
 
     auto trans_it = keyword_index.find(translation);
@@ -155,50 +203,224 @@ std::vector<std::string> VerseFinder::searchByKeywords(const std::string& query,
     }
     const auto& index = trans_it->second;
 
-    auto token_it = index.find(tokens[0]);
-    if (token_it == index.end()) {
-        return {"No matching verses found."};
-    }
-
-    std::vector<std::string> common_refs = token_it->second;
-    std::sort(common_refs.begin(), common_refs.end());
-
-    for (size_t i = 1; i < tokens.size(); ++i) {
-        token_it = index.find(tokens[i]);
+    // Collect token lists for intersection
+    std::vector<std::vector<std::string>> token_lists;
+    token_lists.reserve(tokens.size());
+    
+    for (const auto& token : tokens) {
+        auto token_it = index.find(token);
         if (token_it == index.end()) {
             return {"No matching verses found."};
         }
-
-        std::vector<std::string> refs = token_it->second;
-        std::sort(refs.begin(), refs.end());
-
-        std::vector<std::string> intersection;
-        std::set_intersection(common_refs.begin(), common_refs.end(),
-                              refs.begin(), refs.end(),
-                              std::back_inserter(intersection));
-        common_refs = std::move(intersection);
-
-        if (common_refs.empty()) {
-            break;
-        }
+        token_lists.push_back(token_it->second);
     }
 
+    // Use optimized intersection algorithm
+    std::vector<std::string> common_refs = SearchOptimizer::optimizedIntersection(token_lists);
+
+    if (common_refs.empty()) {
+        return {"No matching verses found."};
+    }
+
+    // Verify phrase matches using optimized verification
     std::vector<std::string> results;
-    std::string lower_query = query;
-    std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
-                   [](unsigned char c){ return std::tolower(c); });
+    results.reserve(common_refs.size());
 
     for (const auto& ref : common_refs) {
         const auto& verse_text = verses.at(translation).at(ref).text;
-        std::string lower_text = verse_text;
-        std::transform(lower_text.begin(), lower_text.end(), lower_text.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
-
-        if (lower_text.find(lower_query) != std::string::npos) {
+        
+        if (SearchOptimizer::verifyPhraseMatch(verse_text, query)) {
             results.push_back(ref + ": " + verse_text);
         }
     }
+    
     return results.empty() ? std::vector<std::string>{"No matching verses found."} : results;
+}
+
+std::vector<std::string> VerseFinder::searchByFullText(const std::string& query, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    
+    BENCHMARK_SCOPE("full_text_search");
+    
+    if (query.empty()) return {"No search query provided."};
+    
+    // Convert query to lowercase for case-insensitive search
+    std::string lower_query = query;
+    std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    
+    auto trans_it = verses.find(translation);
+    if (trans_it == verses.end()) {
+        return {"Translation not found."};
+    }
+    
+    std::vector<std::string> results;
+    const auto& translation_verses = trans_it->second;
+    
+    // Search through all verses in the translation
+    for (const auto& verse_pair : translation_verses) {
+        const std::string& verse_key = verse_pair.first;
+        const Verse& verse = verse_pair.second;
+        
+        // Convert verse text to lowercase for comparison
+        std::string lower_verse_text = verse.text;
+        std::transform(lower_verse_text.begin(), lower_verse_text.end(), lower_verse_text.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        
+        // Check if the query appears as a substring in the verse
+        if (lower_verse_text.find(lower_query) != std::string::npos) {
+            results.push_back(verse_key + ": " + verse.text);
+        }
+        // If not exact substring match, check if all query words appear in the verse
+        else {
+            auto query_words = tokenize(lower_query);
+            bool all_words_found = true;
+            
+            for (const auto& word : query_words) {
+                if (lower_verse_text.find(word) == std::string::npos) {
+                    all_words_found = false;
+                    break;
+                }
+            }
+            
+            if (all_words_found && !query_words.empty()) {
+                results.push_back(verse_key + ": " + verse.text);
+            }
+        }
+    }
+    
+    // Sort results by relevance (exact phrase matches first, then word matches)
+    std::sort(results.begin(), results.end(), [&](const std::string& a, const std::string& b) {
+        std::string text_a = a.substr(a.find(": ") + 2);
+        std::string text_b = b.substr(b.find(": ") + 2);
+        
+        std::transform(text_a.begin(), text_a.end(), text_a.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        std::transform(text_b.begin(), text_b.end(), text_b.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        
+        bool a_exact = text_a.find(lower_query) != std::string::npos;
+        bool b_exact = text_b.find(lower_query) != std::string::npos;
+        
+        if (a_exact && !b_exact) return true;
+        if (!a_exact && b_exact) return false;
+        
+        return false; // Keep original order for same relevance
+    });
+    
+    return results.empty() ? std::vector<std::string>{"No matching verses found."} : results;
+}
+
+bool VerseFinder::parseReference(const std::string& reference, std::string& book, int& chapter, int& verse) const {
+    // Initialize defaults
+    book.clear();
+    chapter = -1;
+    verse = -1;
+    
+    // Find the last space to separate book from chapter:verse
+    size_t space_pos = reference.find_last_of(' ');
+    if (space_pos == std::string::npos) {
+        // No space found - might be just a book name
+        book = reference;
+        return true;
+    }
+    
+    book = reference.substr(0, space_pos);
+    std::string chapter_verse = reference.substr(space_pos + 1);
+    
+    // Check if there's a colon for verse specification
+    size_t colon_pos = chapter_verse.find(':');
+    if (colon_pos != std::string::npos) {
+        // Format: "Book Chapter:Verse"
+        try {
+            chapter = std::stoi(chapter_verse.substr(0, colon_pos));
+            verse = std::stoi(chapter_verse.substr(colon_pos + 1));
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    } else {
+        // Format: "Book Chapter" (chapter only)
+        try {
+            chapter = std::stoi(chapter_verse);
+            return true;
+        } catch (const std::exception&) {
+            // Maybe it's part of the book name (e.g., "1 John")
+            book = reference;
+            return true;
+        }
+    }
+}
+
+std::vector<std::string> VerseFinder::searchByChapter(const std::string& reference, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    
+    BENCHMARK_SCOPE("chapter_search");
+    
+    std::string book;
+    int chapter, verse;
+    
+    if (!parseReference(reference, book, chapter, verse)) {
+        return {"Invalid reference format."};
+    }
+    
+    // Normalize the book name
+    std::string normalized_book = normalizeBookName(book);
+    
+    auto trans_it = verses.find(translation);
+    if (trans_it == verses.end()) {
+        return {"Translation not found."};
+    }
+    
+    std::vector<std::string> results;
+    const auto& translation_verses = trans_it->second;
+    
+    // If only book is specified, return error message suggesting format
+    if (chapter == -1) {
+        return {"Please specify a chapter (e.g., \"" + book + " 1\") or verse (e.g., \"" + book + " 1:1\")."};
+    }
+    
+    // Collect all verses from the specified chapter
+    for (const auto& verse_pair : translation_verses) {
+        const Verse& v = verse_pair.second;
+        if (v.book == normalized_book && v.chapter == chapter) {
+            std::string verse_ref = normalized_book + " " + std::to_string(v.chapter) + ":" + std::to_string(v.verse);
+            results.push_back(verse_ref + ": " + v.text);
+        }
+    }
+    
+    // Sort by verse number
+    std::sort(results.begin(), results.end(), [](const std::string& a, const std::string& b) {
+        // Find the pattern "chapter:verse: " to extract verse numbers
+        size_t colon_a = a.find(':');
+        size_t colon_b = b.find(':');
+        
+        if (colon_a != std::string::npos && colon_b != std::string::npos) {
+            size_t second_colon_a = a.find(':', colon_a + 1);
+            size_t second_colon_b = b.find(':', colon_b + 1);
+            
+            if (second_colon_a != std::string::npos && second_colon_b != std::string::npos) {
+                try {
+                    // Extract verse number between first and second colon
+                    std::string verse_str_a = a.substr(colon_a + 1, second_colon_a - colon_a - 1);
+                    std::string verse_str_b = b.substr(colon_b + 1, second_colon_b - colon_b - 1);
+                    
+                    int verse_a = std::stoi(verse_str_a);
+                    int verse_b = std::stoi(verse_str_b);
+                    return verse_a < verse_b;
+                } catch (const std::exception&) {
+                    return false;
+                }
+            }
+        }
+        return false;
+    });
+    
+    if (results.empty()) {
+        return {"Chapter not found: " + normalized_book + " " + std::to_string(chapter)};
+    }
+    
+    return results;
 }
 
 const std::vector<TranslationInfo>& VerseFinder::getTranslations() const {
@@ -234,7 +456,8 @@ void VerseFinder::addTranslation(const std::string& json_data) {
                 };
                 std::string key = makeKey(v.book, v.chapter, v.verse);
                 verses[trans_name][key] = v;
-                for (const auto& token : tokenize(v.text)) {
+                // Use optimized tokenization
+                for (const auto& token : SearchOptimizer::optimizedTokenize(v.text)) {
                     keyword_index[trans_name][token].push_back(key);
                 }
             }
@@ -264,30 +487,57 @@ void VerseFinder::loadTranslationsFromDirectory(const std::string& dir_path) {
         return;
     }
     
+    auto start_time = std::chrono::steady_clock::now();
+    
     // Clear existing translations
     available_translations.clear();
     verses.clear();
     keyword_index.clear();
     
-    // Load all JSON files in the directory
+    // Collect all JSON files first
+    std::vector<std::string> json_files;
     for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
         if (entry.is_regular_file() && entry.path().extension() == ".json") {
-            std::cout << "Loading translation: " << entry.path().filename() << std::endl;
-            loadSingleTranslation(entry.path().string());
+            json_files.push_back(entry.path().string());
         }
     }
     
     // If no translations found in directory, try to load bible.json from parent directory
-    if (available_translations.empty()) {
+    if (json_files.empty()) {
         std::string bible_file = dir_path + "/../bible.json";
         if (std::filesystem::exists(bible_file)) {
-            std::cout << "Loading default bible.json" << std::endl;
-            loadSingleTranslation(bible_file);
+            json_files.push_back(bible_file);
         }
     }
     
+    if (json_files.empty()) {
+        std::cout << "No translation files found." << std::endl;
+        return;
+    }
+    
+    std::cout << "Loading " << json_files.size() << " translation files..." << std::endl;
+    
+    // Load files in parallel using async tasks
+    std::vector<std::future<void>> loading_tasks;
+    std::mutex data_mutex; // Protect shared data structures
+    
+    for (const auto& file_path : json_files) {
+        loading_tasks.emplace_back(std::async(std::launch::async, [this, file_path, &data_mutex]() {
+            loadSingleTranslationOptimized(file_path, data_mutex);
+        }));
+    }
+    
+    // Wait for all loading tasks to complete
+    for (auto& task : loading_tasks) {
+        task.wait();
+    }
+    
+    auto end_time = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    
     data_loaded = true;
-    std::cout << "Loaded " << available_translations.size() << " translations." << std::endl;
+    std::cout << "Loaded " << available_translations.size() << " translations in " 
+              << duration.count() << "ms." << std::endl;
 }
 
 void VerseFinder::loadSingleTranslation(const std::string& filename) {
@@ -348,6 +598,101 @@ void VerseFinder::loadSingleTranslation(const std::string& filename) {
     }
     
     std::cout << "Successfully loaded translation: " << trans_name << " (" << trans_abbr << ")" << std::endl;
+}
+
+void VerseFinder::loadSingleTranslationOptimized(const std::string& filename, std::mutex& data_mutex) {
+    // Load and parse JSON outside of the lock
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open " << filename << std::endl;
+        return;
+    }
+
+    json j;
+    try {
+        // Use more efficient JSON parsing
+        file.seekg(0, std::ios::end);
+        size_t file_size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        
+        std::string json_content;
+        json_content.reserve(file_size); // Pre-allocate memory
+        
+        json_content.assign((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+        
+        j = json::parse(json_content);
+    } catch (const std::exception& e) {
+        std::cerr << "Error parsing JSON file " << filename << ": " << e.what() << std::endl;
+        return;
+    }
+
+    std::string trans_name = j.value("translation", "Unknown");
+    std::string trans_abbr = j.value("abbreviation", "UNK");
+
+    // Pre-process all data structures without locks
+    std::unordered_map<std::string, Verse> local_verses;
+    std::unordered_map<std::string, std::vector<std::string>> local_keyword_index;
+    
+    // Estimate capacity for better performance
+    if (j.contains("books") && j["books"].is_array()) {
+        size_t estimated_verses = j["books"].size() * 25 * 30; // rough estimate
+        local_verses.reserve(estimated_verses);
+        local_keyword_index.reserve(estimated_verses / 10); // estimate unique words
+    }
+
+    // Load verses into local data structures
+    if (j.contains("books") && j["books"].is_array()) {
+        for (const auto& book_json : j["books"]) {
+            std::string book_name = book_json.value("name", "Unknown Book");
+            if (book_json.contains("chapters") && book_json["chapters"].is_array()) {
+                for (const auto& chapter_json : book_json["chapters"]) {
+                    int chapter_num = chapter_json.value("chapter", 1);
+                    if (chapter_json.contains("verses") && chapter_json["verses"].is_array()) {
+                        for (const auto& verse_json : chapter_json["verses"]) {
+                            Verse v{
+                                book_name,
+                                chapter_num,
+                                verse_json.value("verse", 1),
+                                verse_json.value("text", "")
+                            };
+                            std::string key = makeKey(v.book, v.chapter, v.verse);
+                            
+                            // Build keyword index before moving the verse
+                            std::vector<std::string> tokens = tokenize(v.text);
+                            for (const auto& token : tokens) {
+                                local_keyword_index[token].push_back(key);
+                            }
+                            
+                            local_verses[key] = std::move(v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Now lock and move all data to shared structures
+    {
+        std::lock_guard<std::mutex> lock(data_mutex);
+        
+        // Check if translation already exists
+        for (const auto& trans_info : available_translations) {
+            if (trans_info.name == trans_name) {
+                std::cout << "Translation " << trans_name << " already loaded, skipping." << std::endl;
+                return;
+            }
+        }
+        
+        available_translations.push_back({trans_name, trans_abbr});
+        
+        // Move local data to shared structures
+        verses[trans_name] = std::move(local_verses);
+        keyword_index[trans_name] = std::move(local_keyword_index);
+        
+        std::cout << "Loaded translation: " << trans_name << " (" 
+                  << verses[trans_name].size() << " verses)" << std::endl;
+    }
 }
 
 bool VerseFinder::saveTranslation(const std::string& json_data, const std::string& filename) {
@@ -492,4 +837,28 @@ int VerseFinder::getLastChapterInBook(const std::string& book, const std::string
     }
     
     return last_chapter;
+}
+
+void VerseFinder::clearSearchCache() {
+    search_cache.clear();
+}
+
+void VerseFinder::setBenchmark(PerformanceBenchmark* bench) {
+    benchmark = bench;
+}
+
+PerformanceBenchmark* VerseFinder::getBenchmark() const {
+    return benchmark;
+}
+
+void VerseFinder::printPerformanceStats() const {
+    if (benchmark) {
+        benchmark->printSummary();
+        
+        // Print cache statistics
+        std::cout << "\n=== Search Cache Statistics ===\n";
+        std::cout << "Cache size: " << search_cache.size() << "/" << search_cache.maxSize() << "\n";
+        std::cout << "Hit rate: " << std::fixed << std::setprecision(2) << (search_cache.hitRate() * 100) << "%\n";
+        std::cout << std::endl;
+    }
 }

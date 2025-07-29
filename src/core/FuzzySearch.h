@@ -23,12 +23,15 @@ struct FuzzySearchOptions {
     bool enablePartialMatch = true;
     int maxSuggestions = 5;
     int maxEditDistance = 3;
+    int maxCandidates = 1000;  // Limit candidates processed for performance
+    bool enableEarlyTermination = true;  // Stop when good matches found
 };
 
 class FuzzySearch {
 private:
     FuzzySearchOptions options;
     mutable std::unordered_map<std::string, std::string> soundexCache;
+    mutable std::unordered_map<std::string, std::string> normalizeCache;
     
     // Levenshtein distance calculation
     int levenshteinDistance(const std::string& s1, const std::string& s2) const;

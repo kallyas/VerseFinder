@@ -11,6 +11,7 @@
 #include "SearchCache.h"
 #include "SearchOptimizer.h"
 #include "PerformanceBenchmark.h"
+#include "FuzzySearch.h"
 
 using json = nlohmann::json;
 
@@ -40,6 +41,10 @@ private:
     // Performance optimization components
     SearchCache search_cache;
     PerformanceBenchmark* benchmark;
+    
+    // Fuzzy search component
+    FuzzySearch fuzzy_search;
+    bool fuzzy_search_enabled = false;
 
     void loadBibleInternal(const std::string& filename);
     void loadTranslationsFromDirectory(const std::string& dir_path);
@@ -82,6 +87,16 @@ public:
     void setBenchmark(PerformanceBenchmark* bench);
     PerformanceBenchmark* getBenchmark() const;
     void printPerformanceStats() const;
+    
+    // Fuzzy search methods
+    void enableFuzzySearch(bool enable);
+    bool isFuzzySearchEnabled() const;
+    void setFuzzySearchOptions(const FuzzySearchOptions& options);
+    const FuzzySearchOptions& getFuzzySearchOptions() const;
+    
+    std::vector<std::string> searchByKeywordsFuzzy(const std::string& query, const std::string& translation) const;
+    std::vector<FuzzyMatch> findBookNameSuggestions(const std::string& query) const;
+    std::vector<std::string> generateQuerySuggestions(const std::string& query, const std::string& translation) const;
 };
 
 #endif //VERSEFINDER_H

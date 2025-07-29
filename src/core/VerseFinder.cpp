@@ -862,3 +862,114 @@ void VerseFinder::printPerformanceStats() const {
         std::cout << std::endl;
     }
 }
+
+void VerseFinder::enableFuzzySearch(bool enable) {
+    fuzzy_search_enabled = enable;
+    std::cout << "Fuzzy search " << (enable ? "enabled" : "disabled") << std::endl;
+}
+
+bool VerseFinder::isFuzzySearchEnabled() const {
+    return fuzzy_search_enabled;
+}
+
+void VerseFinder::setFuzzySearchOptions(const FuzzySearchOptions& options) {
+    fuzzy_search.setOptions(options);
+}
+
+const FuzzySearchOptions& VerseFinder::getFuzzySearchOptions() const {
+    return fuzzy_search.getOptions();
+}
+
+std::vector<std::string> VerseFinder::searchByKeywordsFuzzy(const std::string& query, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    if (!fuzzy_search_enabled) return searchByKeywords(query, translation);
+    
+    BENCHMARK_SCOPE("fuzzy_keyword_search");
+    
+    // First try exact search
+    std::vector<std::string> exact_results = searchByKeywords(query, translation);
+    
+    // If we have good exact results, return them
+    if (!exact_results.empty() && exact_results[0] != "No matching verses found.") {
+        return exact_results;
+    }
+    
+    // Perform fuzzy search on verse texts
+    auto trans_it = verses.find(translation);
+    if (trans_it == verses.end()) {
+        return {"Translation not found."};
+    }
+    
+    const auto& translation_verses = trans_it->second;
+    std::vector<std::string> verse_texts;
+    std::vector<std::string> verse_keys;
+    
+    // Collect all verse texts for fuzzy matching
+    for (const auto& verse_pair : translation_verses) {
+        verse_texts.push_back(verse_pair.second.text);
+        verse_keys.push_back(verse_pair.first);
+    }
+    
+    // Use fuzzy search to find matches
+    std::vector<FuzzyMatch> fuzzy_matches = fuzzy_search.findMatches(query, verse_texts);
+    
+    std::vector<std::string> results;
+    for (const auto& match : fuzzy_matches) {
+        // Find the corresponding verse key
+        auto it = std::find(verse_texts.begin(), verse_texts.end(), match.text);
+        if (it != verse_texts.end()) {
+            size_t index = std::distance(verse_texts.begin(), it);
+            if (index < verse_keys.size()) {
+                std::string confidence_indicator;
+                if (match.matchType == "fuzzy") {
+                    confidence_indicator = " [~" + std::to_string(static_cast<int>(match.confidence * 100)) + "%]";
+                } else if (match.matchType == "phonetic") {
+                    confidence_indicator = " [♪]";
+                } else if (match.matchType == "partial") {
+                    confidence_indicator = " [...]";
+                }
+                results.push_back(verse_keys[index] + confidence_indicator + ": " + match.text);
+            }
+        }
+    }
+    
+    return results.empty() ? std::vector<std::string>{"No fuzzy matches found."} : results;
+}
+
+std::vector<FuzzyMatch> VerseFinder::findBookNameSuggestions(const std::string& query) const {
+    if (!isReady() || !fuzzy_search_enabled) return {};
+    
+    // Collect all unique book names from loaded translations
+    std::set<std::string> book_names_set;
+    for (const auto& translation_pair : verses) {
+        for (const auto& verse_pair : translation_pair.second) {
+            book_names_set.insert(verse_pair.second.book);
+        }
+    }
+    
+    // Also include book aliases
+    for (const auto& alias_pair : book_aliases) {
+        book_names_set.insert(alias_pair.first);
+        book_names_set.insert(alias_pair.second);
+    }
+    
+    std::vector<std::string> book_names(book_names_set.begin(), book_names_set.end());
+    return fuzzy_search.findBookMatches(query, book_names);
+}
+
+std::vector<std::string> VerseFinder::generateQuerySuggestions(const std::string& query, const std::string& translation) const {
+    if (!isReady() || !fuzzy_search_enabled) return {};
+    
+    // Generate suggestions based on keywords from the translation
+    auto trans_it = keyword_index.find(translation);
+    if (trans_it == keyword_index.end()) {
+        return {};
+    }
+    
+    std::vector<std::string> keywords;
+    for (const auto& keyword_pair : trans_it->second) {
+        keywords.push_back(keyword_pair.first);
+    }
+    
+    return fuzzy_search.generateSuggestions(query, keywords);
+}

@@ -19,6 +19,7 @@
 #endif
 
 #include "../core/VerseFinder.h"
+#include "../core/FuzzySearch.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -60,6 +61,11 @@ private:
     std::string selected_verse_text;
     std::string last_search_query;
     bool auto_search = true;
+    
+    // Fuzzy search state
+    bool fuzzy_search_enabled = false;
+    std::vector<std::string> query_suggestions;
+    std::vector<FuzzyMatch> book_suggestions;
     
     // Chapter viewing state
     bool is_viewing_chapter = false;

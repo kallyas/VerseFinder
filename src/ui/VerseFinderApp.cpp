@@ -415,7 +415,7 @@ void VerseFinderApp::renderSearchArea() {
         performSearch();
     }
     
-    // Search buttons
+    // Search buttons and controls
     ImGui::Spacing();
     if (ImGui::Button("🔍 Search", ImVec2(80, 0))) {
         performSearch();
@@ -429,6 +429,64 @@ void VerseFinderApp::renderSearchArea() {
     ImGui::SameLine();
     ImGui::Checkbox("##auto_search", &auto_search);
     
+    // Fuzzy search controls
+    ImGui::SameLine();
+    ImGui::Text("Fuzzy: ");
+    ImGui::SameLine();
+    if (ImGui::Checkbox("##fuzzy_search", &fuzzy_search_enabled)) {
+        bible.enableFuzzySearch(fuzzy_search_enabled);
+        // Generate suggestions if enabling fuzzy search and there's input
+        if (fuzzy_search_enabled && strlen(search_input) > 0) {
+            query_suggestions = bible.generateQuerySuggestions(search_input, current_translation.name);
+            book_suggestions = bible.findBookNameSuggestions(search_input);
+        }
+    }
+    
+    // Show fuzzy search suggestions
+    if (fuzzy_search_enabled && strlen(search_input) > 0) {
+        // Book name suggestions
+        if (!book_suggestions.empty()) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "📖 Did you mean:");
+            for (size_t i = 0; i < std::min(book_suggestions.size(), size_t(3)); ++i) {
+                const auto& suggestion = book_suggestions[i];
+                std::string confidence_text = "";
+                if (suggestion.matchType == "fuzzy") {
+                    confidence_text = " (~" + std::to_string(static_cast<int>(suggestion.confidence * 100)) + "%)";
+                } else if (suggestion.matchType == "phonetic") {
+                    confidence_text = " (♪)";
+                } else if (suggestion.matchType == "partial") {
+                    confidence_text = " (...)";
+                }
+                
+                if (ImGui::SmallButton((suggestion.text + confidence_text).c_str())) {
+                    strncpy(search_input, suggestion.text.c_str(), sizeof(search_input) - 1);
+                    search_input[sizeof(search_input) - 1] = '\0';
+                    performSearch();
+                }
+                if (i < std::min(book_suggestions.size(), size_t(3)) - 1) {
+                    ImGui::SameLine();
+                }
+            }
+        }
+        
+        // Query keyword suggestions
+        if (!query_suggestions.empty()) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "💭 Suggestions:");
+            for (size_t i = 0; i < std::min(query_suggestions.size(), size_t(3)); ++i) {
+                if (ImGui::SmallButton(query_suggestions[i].c_str())) {
+                    strncpy(search_input, query_suggestions[i].c_str(), sizeof(search_input) - 1);
+                    search_input[sizeof(search_input) - 1] = '\0';
+                    performSearch();
+                }
+                if (i < std::min(query_suggestions.size(), size_t(3)) - 1) {
+                    ImGui::SameLine();
+                }
+            }
+        }
+    }
+    
     // Search hints
     if (strlen(search_input) == 0) {
         ImGui::Spacing();
@@ -437,6 +495,15 @@ void VerseFinderApp::renderSearchArea() {
         ImGui::BulletText("love - Find verses with keyword");
         ImGui::BulletText("faith hope love - Find multiple keywords");
         ImGui::BulletText("Psalm 23 - Find chapter references");
+        
+        if (fuzzy_search_enabled) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "🎯 Fuzzy Search Examples:");
+            ImGui::BulletText("Jhn 3:16 - Corrects typos in book names");
+            ImGui::BulletText("luv - Finds 'love' with phonetic matching");
+            ImGui::BulletText("Gen - Suggests 'Genesis' from partial match");
+            ImGui::BulletText("fait - Suggests 'faith' from similar spelling");
+        }
     }
 }
 
@@ -803,6 +870,79 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
+            if (ImGui::BeginTabItem("🔍 Search")) {
+                ImGui::Text("Configure search behavior and fuzzy matching");
+                ImGui::Separator();
+                
+                // Fuzzy search settings
+                ImGui::Text("🎯 Fuzzy Search Settings");
+                ImGui::Spacing();
+                
+                if (ImGui::Checkbox("Enable Fuzzy Search", &fuzzy_search_enabled)) {
+                    bible.enableFuzzySearch(fuzzy_search_enabled);
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Find verses even with typos and approximate matches");
+                
+                if (fuzzy_search_enabled) {
+                    ImGui::Spacing();
+                    
+                    // Get current fuzzy search options
+                    FuzzySearchOptions options = bible.getFuzzySearchOptions();
+                    bool options_changed = false;
+                    
+                    // Minimum confidence slider
+                    float min_confidence = static_cast<float>(options.minConfidence);
+                    if (ImGui::SliderFloat("Similarity Threshold", &min_confidence, 0.1f, 1.0f, "%.2f")) {
+                        options.minConfidence = static_cast<double>(min_confidence);
+                        options_changed = true;
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Higher values = more strict matching");
+                    
+                    // Max edit distance
+                    int max_edit_distance = options.maxEditDistance;
+                    if (ImGui::SliderInt("Max Edit Distance", &max_edit_distance, 1, 5)) {
+                        options.maxEditDistance = max_edit_distance;
+                        options_changed = true;
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Maximum character changes allowed");
+                    
+                    // Phonetic matching
+                    if (ImGui::Checkbox("Enable Phonetic Matching", &options.enablePhonetic)) {
+                        options_changed = true;
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Match words that sound similar (e.g., 'John' ~ 'Jon')");
+                    
+                    // Partial matching
+                    if (ImGui::Checkbox("Enable Partial Matching", &options.enablePartialMatch)) {
+                        options_changed = true;
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Match partial words and substrings");
+                    
+                    // Max suggestions
+                    int max_suggestions = options.maxSuggestions;
+                    if (ImGui::SliderInt("Max Suggestions", &max_suggestions, 3, 10)) {
+                        options.maxSuggestions = max_suggestions;
+                        options_changed = true;
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Maximum number of suggestions to show");
+                    
+                    // Apply changes
+                    if (options_changed) {
+                        bible.setFuzzySearchOptions(options);
+                    }
+                    
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Text("💡 Fuzzy Search Examples:");
+                    ImGui::BulletText("'Jhn 3:16' → 'John 3:16' (typo correction)");
+                    ImGui::BulletText("'luv' → verses about 'love' (phonetic matching)");
+                    ImGui::BulletText("'Gen' → 'Genesis' (partial matching)");
+                    ImGui::BulletText("'fait' → 'faith' (edit distance matching)");
+                }
+                
+                ImGui::EndTabItem();
+            }
+            
             if (ImGui::BeginTabItem("⌨️ Shortcuts")) {
                 ImGui::Text("Keyboard shortcuts for VerseFinder");
                 ImGui::Separator();
@@ -848,6 +988,7 @@ void VerseFinderApp::renderAboutWindow() {
         ImGui::Text("Features:");
         ImGui::BulletText("Fast verse lookup by reference");
         ImGui::BulletText("Keyword search across translations");
+        ImGui::BulletText("Fuzzy search with typo correction");
         ImGui::BulletText("Multiple Bible translation support");
         ImGui::BulletText("Modern, responsive interface");
         ImGui::BulletText("Church-friendly design");
@@ -1080,8 +1221,16 @@ void VerseFinderApp::performSearch() {
             }
         }
     } else {
-        // Use full text search for phrases and keywords
-        search_results = bible.searchByKeywords(query, current_translation.name);
+        // Use keyword search (with fuzzy search if enabled)
+        if (fuzzy_search_enabled) {
+            search_results = bible.searchByKeywordsFuzzy(query, current_translation.name);
+            
+            // Generate suggestions for the current query
+            query_suggestions = bible.generateQuerySuggestions(query, current_translation.name);
+            book_suggestions = bible.findBookNameSuggestions(query);
+        } else {
+            search_results = bible.searchByKeywords(query, current_translation.name);
+        }
         is_viewing_chapter = false;
     }
     
@@ -1104,6 +1253,10 @@ void VerseFinderApp::clearSearch() {
     selected_verse_text.clear();
     last_search_query.clear();
     last_search_time_ms = 0.0;
+    
+    // Clear fuzzy search suggestions
+    query_suggestions.clear();
+    book_suggestions.clear();
 }
 
 void VerseFinderApp::selectResult(int index) {

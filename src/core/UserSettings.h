@@ -41,10 +41,35 @@ struct ContentSettings {
     bool saveSearchHistory = true;
 };
 
+struct PresentationSettings {
+    bool enabled = false;
+    float fontSize = 48.0f;
+    std::string fontFamily = "Arial";
+    std::string backgroundColor = "#000000"; // Black
+    std::string textColor = "#FFFFFF"; // White
+    std::string referenceColor = "#CCCCCC"; // Light gray
+    bool showReference = true;
+    bool showBackground = false;
+    std::string backgroundImagePath = "";
+    int windowWidth = 1920;
+    int windowHeight = 1080;
+    int windowPosX = -1; // -1 means auto-detect second monitor
+    int windowPosY = -1;
+    int monitorIndex = 1; // 0 = primary, 1 = secondary
+    bool fullscreen = true;
+    bool obsOptimized = true; // Optimizations for OBS capture
+    std::string windowTitle = "VerseFinder - Presentation";
+    bool autoHideCursor = true;
+    float fadeTransitionTime = 0.3f; // seconds
+    std::string textAlignment = "center"; // "left", "center", "right"
+    float textPadding = 40.0f; // pixels from edge
+};
+
 struct UserSettings {
     DisplaySettings display;
     SearchSettings search;
     ContentSettings content;
+    PresentationSettings presentation;
     std::string version = "1.0";
     
     // Serialization methods
@@ -72,6 +97,9 @@ void from_json(const json& j, SearchSettings& settings);
 
 void to_json(json& j, const ContentSettings& settings);
 void from_json(const json& j, ContentSettings& settings);
+
+void to_json(json& j, const PresentationSettings& settings);
+void from_json(const json& j, PresentationSettings& settings);
 
 void to_json(json& j, const UserSettings& settings);
 void from_json(const json& j, UserSettings& settings);

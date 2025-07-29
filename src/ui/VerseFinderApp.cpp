@@ -22,7 +22,7 @@
 #include <shlobj.h>
 #endif
 
-VerseFinderApp::VerseFinderApp() : window(nullptr) {}
+VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr) {}
 
 VerseFinderApp::~VerseFinderApp() {
     cleanup();
@@ -619,7 +619,10 @@ void VerseFinderApp::run() {
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         
-        // No additional platform windows in this version
+        // Render presentation window if active
+        if (isPresentationWindowActive()) {
+            renderPresentationWindow();
+        }
         
         glfwSwapBuffers(window);
     }
@@ -648,6 +651,8 @@ void VerseFinderApp::renderMainWindow() {
     ImGui::BeginChild("InfoPanel", ImVec2(0, 0), true);
     
     renderTranslationSelector();
+    ImGui::Separator();
+    renderPresentationPreview();
     ImGui::Separator();
     renderStatusBar();
     
@@ -918,6 +923,12 @@ void VerseFinderApp::renderSearchResults() {
             if (ImGui::MenuItem("🔍 View Full Verse")) {
                 selectResult(static_cast<int>(i));
                 show_verse_modal = true;
+            }
+            if (userSettings.presentation.enabled && ImGui::MenuItem("📺 Display on Presentation")) {
+                selectResult(static_cast<int>(i));
+                std::string verse_text = formatVerseText(selected_verse_text);
+                std::string reference = formatVerseReference(selected_verse_text);
+                displayVerseOnPresentation(verse_text, reference);
             }
             ImGui::EndPopup();
         }
@@ -1496,6 +1507,185 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
+            if (ImGui::BeginTabItem("📺 Presentation")) {
+                ImGui::Text("Configure presentation mode for OBS and live display");
+                ImGui::Separator();
+                
+                // Enable/Disable presentation mode
+                bool presentation_enabled = userSettings.presentation.enabled;
+                if (ImGui::Checkbox("Enable Presentation Mode", &presentation_enabled)) {
+                    userSettings.presentation.enabled = presentation_enabled;
+                }
+                
+                if (userSettings.presentation.enabled) {
+                    ImGui::Spacing();
+                    
+                    // Monitor selection
+                    auto monitors = getAvailableMonitors();
+                    if (!monitors.empty()) {
+                        std::vector<const char*> monitor_names;
+                        for (size_t i = 0; i < monitors.size(); i++) {
+                            const char* name = glfwGetMonitorName(monitors[i]);
+                            monitor_names.push_back(name ? name : ("Monitor " + std::to_string(i)).c_str());
+                        }
+                        
+                        if (ImGui::Combo("Target Monitor", &userSettings.presentation.monitorIndex, 
+                                       monitor_names.data(), static_cast<int>(monitor_names.size()))) {
+                            if (presentation_mode_active) {
+                                updatePresentationMonitorPosition();
+                            }
+                        }
+                    }
+                    
+                    // Fullscreen option
+                    bool fullscreen = userSettings.presentation.fullscreen;
+                    if (ImGui::Checkbox("Fullscreen Mode", &fullscreen)) {
+                        userSettings.presentation.fullscreen = fullscreen;
+                        if (presentation_mode_active) {
+                            updatePresentationMonitorPosition();
+                        }
+                    }
+                    
+                    if (!userSettings.presentation.fullscreen) {
+                        // Window size settings
+                        int width = userSettings.presentation.windowWidth;
+                        int height = userSettings.presentation.windowHeight;
+                        
+                        if (ImGui::InputInt("Window Width", &width)) {
+                            userSettings.presentation.windowWidth = std::max(640, width);
+                        }
+                        if (ImGui::InputInt("Window Height", &height)) {
+                            userSettings.presentation.windowHeight = std::max(480, height);
+                        }
+                    }
+                    
+                    ImGui::Separator();
+                    ImGui::Text("🎨 Appearance Settings");
+                    ImGui::Spacing();
+                    
+                    // Font size
+                    float fontSize = userSettings.presentation.fontSize;
+                    if (ImGui::SliderFloat("Font Size", &fontSize, 24.0f, 120.0f, "%.0f")) {
+                        userSettings.presentation.fontSize = fontSize;
+                    }
+                    
+                    // Text alignment
+                    const char* alignments[] = {"left", "center", "right"};
+                    int current_alignment = 1; // default to center
+                    if (userSettings.presentation.textAlignment == "left") current_alignment = 0;
+                    else if (userSettings.presentation.textAlignment == "right") current_alignment = 2;
+                    
+                    if (ImGui::Combo("Text Alignment", &current_alignment, alignments, 3)) {
+                        userSettings.presentation.textAlignment = alignments[current_alignment];
+                    }
+                    
+                    // Text padding
+                    float padding = userSettings.presentation.textPadding;
+                    if (ImGui::SliderFloat("Text Padding", &padding, 10.0f, 100.0f, "%.0f")) {
+                        userSettings.presentation.textPadding = padding;
+                    }
+                    
+                    // Show reference option
+                    bool showReference = userSettings.presentation.showReference;
+                    if (ImGui::Checkbox("Show Bible Reference", &showReference)) {
+                        userSettings.presentation.showReference = showReference;
+                    }
+                    
+                    ImGui::Separator();
+                    ImGui::Text("🎨 Colors");
+                    ImGui::Spacing();
+                    
+                    // Background color
+                    ImVec4 bg_color = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+                    if (userSettings.presentation.backgroundColor.length() == 7 && userSettings.presentation.backgroundColor[0] == '#') {
+                        std::string hex = userSettings.presentation.backgroundColor.substr(1);
+                        bg_color.x = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+                        bg_color.y = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+                        bg_color.z = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+                    }
+                    
+                    if (ImGui::ColorEdit3("Background Color", (float*)&bg_color)) {
+                        char hex[8];
+                        sprintf(hex, "#%02X%02X%02X", 
+                               (int)(bg_color.x * 255), 
+                               (int)(bg_color.y * 255), 
+                               (int)(bg_color.z * 255));
+                        userSettings.presentation.backgroundColor = std::string(hex);
+                    }
+                    
+                    // Text color
+                    ImVec4 text_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    if (userSettings.presentation.textColor.length() == 7 && userSettings.presentation.textColor[0] == '#') {
+                        std::string hex = userSettings.presentation.textColor.substr(1);
+                        text_color.x = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+                        text_color.y = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+                        text_color.z = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+                    }
+                    
+                    if (ImGui::ColorEdit3("Text Color", (float*)&text_color)) {
+                        char hex[8];
+                        sprintf(hex, "#%02X%02X%02X", 
+                               (int)(text_color.x * 255), 
+                               (int)(text_color.y * 255), 
+                               (int)(text_color.z * 255));
+                        userSettings.presentation.textColor = std::string(hex);
+                    }
+                    
+                    // Reference color
+                    ImVec4 ref_color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+                    if (userSettings.presentation.referenceColor.length() == 7 && userSettings.presentation.referenceColor[0] == '#') {
+                        std::string hex = userSettings.presentation.referenceColor.substr(1);
+                        ref_color.x = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+                        ref_color.y = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+                        ref_color.z = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+                    }
+                    
+                    if (ImGui::ColorEdit3("Reference Color", (float*)&ref_color)) {
+                        char hex[8];
+                        sprintf(hex, "#%02X%02X%02X", 
+                               (int)(ref_color.x * 255), 
+                               (int)(ref_color.y * 255), 
+                               (int)(ref_color.z * 255));
+                        userSettings.presentation.referenceColor = std::string(hex);
+                    }
+                    
+                    ImGui::Separator();
+                    ImGui::Text("⚙️ Advanced Options");
+                    ImGui::Spacing();
+                    
+                    // OBS optimization
+                    bool obsOptimized = userSettings.presentation.obsOptimized;
+                    if (ImGui::Checkbox("OBS Studio Optimization", &obsOptimized)) {
+                        userSettings.presentation.obsOptimized = obsOptimized;
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Optimizes window for OBS capture");
+                    
+                    // Auto hide cursor
+                    bool autoHideCursor = userSettings.presentation.autoHideCursor;
+                    if (ImGui::Checkbox("Auto-hide Cursor", &autoHideCursor)) {
+                        userSettings.presentation.autoHideCursor = autoHideCursor;
+                    }
+                    
+                    // Fade transition time
+                    float fadeTime = userSettings.presentation.fadeTransitionTime;
+                    if (ImGui::SliderFloat("Fade Transition Time", &fadeTime, 0.0f, 2.0f, "%.1fs")) {
+                        userSettings.presentation.fadeTransitionTime = fadeTime;
+                    }
+                    
+                    // Window title for OBS
+                    char title[256];
+                    strncpy(title, userSettings.presentation.windowTitle.c_str(), sizeof(title) - 1);
+                    title[sizeof(title) - 1] = '\0';
+                    
+                    if (ImGui::InputText("Window Title", title, sizeof(title))) {
+                        userSettings.presentation.windowTitle = std::string(title);
+                    }
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Title shown in OBS window capture list");
+                }
+                
+                ImGui::EndTabItem();
+            }
+            
             if (ImGui::BeginTabItem("⌨️ Shortcuts")) {
                 ImGui::Text("Keyboard shortcuts for VerseFinder");
                 ImGui::Separator();
@@ -1505,6 +1695,9 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::BulletText("Ctrl+P - Performance statistics");
                 ImGui::BulletText("Ctrl+, - Open settings");
                 ImGui::BulletText("F1 - Show help");
+                ImGui::BulletText("F5 - Toggle presentation mode");
+                ImGui::BulletText("F6 - Toggle blank screen (presentation)");
+                ImGui::BulletText("F7 - Display selected verse (presentation)");
                 ImGui::BulletText("Enter - Search");
                 ImGui::BulletText("Escape - Close dialogs");
                 
@@ -1755,6 +1948,24 @@ void VerseFinderApp::handleKeyboardShortcuts() {
     // F1 - Help
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_F1))) {
         show_help_window = true;
+    }
+    
+    // F5 - Toggle presentation mode
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_F5))) {
+        togglePresentationMode();
+    }
+    
+    // F6 - Toggle blank screen (if presentation is active)
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_F6)) && isPresentationWindowActive()) {
+        toggleBlankScreen();
+    }
+    
+    // F7 - Display selected verse on presentation (if one is selected)
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_F7)) && 
+        isPresentationWindowActive() && !selected_verse_text.empty()) {
+        std::string verse_text = formatVerseText(selected_verse_text);
+        std::string reference = formatVerseReference(selected_verse_text);
+        displayVerseOnPresentation(verse_text, reference);
     }
     
     // Ctrl+P - Performance stats
@@ -2340,7 +2551,362 @@ std::string VerseFinderApp::extractFilenameFromUrl(const std::string& url, const
     return getTranslationFilename(translation_name);
 }
 
+// Presentation Mode Implementation
+void VerseFinderApp::initPresentationWindow() {
+    if (presentation_window) {
+        return; // Already created
+    }
+    
+    auto monitors = getAvailableMonitors();
+    GLFWmonitor* target_monitor = nullptr;
+    
+    // Select monitor based on settings
+    if (userSettings.presentation.monitorIndex < static_cast<int>(monitors.size())) {
+        target_monitor = monitors[userSettings.presentation.monitorIndex];
+    } else if (!monitors.empty()) {
+        target_monitor = monitors[0]; // Fallback to primary monitor
+    }
+    
+    if (!target_monitor) {
+        std::cerr << "No monitor available for presentation window" << std::endl;
+        return;
+    }
+    
+    // Get monitor properties
+    const GLFWvidmode* mode = glfwGetVideoMode(target_monitor);
+    int monitor_x, monitor_y;
+    glfwGetMonitorPos(target_monitor, &monitor_x, &monitor_y);
+    
+    // Set window hints for presentation window
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+    
+    // Create window
+    if (userSettings.presentation.fullscreen) {
+        presentation_window = glfwCreateWindow(mode->width, mode->height, 
+                                             userSettings.presentation.windowTitle.c_str(), 
+                                             target_monitor, window);
+    } else {
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE); // Borderless for OBS
+        presentation_window = glfwCreateWindow(userSettings.presentation.windowWidth, 
+                                             userSettings.presentation.windowHeight,
+                                             userSettings.presentation.windowTitle.c_str(), 
+                                             nullptr, window);
+        
+        // Position on target monitor
+        int window_x = monitor_x + (mode->width - userSettings.presentation.windowWidth) / 2;
+        int window_y = monitor_y + (mode->height - userSettings.presentation.windowHeight) / 2;
+        
+        if (userSettings.presentation.windowPosX >= 0 && userSettings.presentation.windowPosY >= 0) {
+            window_x = monitor_x + userSettings.presentation.windowPosX;
+            window_y = monitor_y + userSettings.presentation.windowPosY;
+        }
+        
+        glfwSetWindowPos(presentation_window, window_x, window_y);
+    }
+    
+    if (!presentation_window) {
+        std::cerr << "Failed to create presentation window" << std::endl;
+        return;
+    }
+    
+    // Hide cursor if enabled
+    if (userSettings.presentation.autoHideCursor) {
+        glfwSetInputMode(presentation_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    }
+    
+    std::cout << "Presentation window created successfully" << std::endl;
+}
+
+void VerseFinderApp::destroyPresentationWindow() {
+    if (presentation_window) {
+        glfwDestroyWindow(presentation_window);
+        presentation_window = nullptr;
+        presentation_mode_active = false;
+    }
+}
+
+void VerseFinderApp::renderPresentationWindow() {
+    if (!presentation_window) {
+        return;
+    }
+    
+    // Make presentation window context current
+    glfwMakeContextCurrent(presentation_window);
+    
+    int display_w, display_h;
+    glfwGetFramebufferSize(presentation_window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    
+    // Parse background color
+    float bg_r = 0.0f, bg_g = 0.0f, bg_b = 0.0f;
+    if (userSettings.presentation.backgroundColor.length() == 7 && userSettings.presentation.backgroundColor[0] == '#') {
+        std::string hex = userSettings.presentation.backgroundColor.substr(1);
+        bg_r = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+        bg_g = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+        bg_b = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+    }
+    
+    glClearColor(bg_r, bg_g, bg_b, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Start ImGui frame for presentation window
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    
+    // Create fullscreen invisible window for rendering
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | 
+                           ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                           ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
+                           ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                           ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoDecoration;
+    
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(display_w, display_h));
+    
+    if (ImGui::Begin("PresentationDisplay", nullptr, flags)) {
+        if (!presentation_blank_screen && !current_displayed_verse.empty()) {
+            // Parse text color
+            float text_r = 1.0f, text_g = 1.0f, text_b = 1.0f;
+            if (userSettings.presentation.textColor.length() == 7 && userSettings.presentation.textColor[0] == '#') {
+                std::string hex = userSettings.presentation.textColor.substr(1);
+                text_r = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+                text_g = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+                text_b = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+            }
+            
+            // Parse reference color
+            float ref_r = 0.8f, ref_g = 0.8f, ref_b = 0.8f;
+            if (userSettings.presentation.referenceColor.length() == 7 && userSettings.presentation.referenceColor[0] == '#') {
+                std::string hex = userSettings.presentation.referenceColor.substr(1);
+                ref_r = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+                ref_g = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+                ref_b = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+            }
+            
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(userSettings.presentation.textPadding, userSettings.presentation.textPadding));
+            
+            // Calculate text area
+            float available_width = display_w - (2 * userSettings.presentation.textPadding);
+            float available_height = display_h - (2 * userSettings.presentation.textPadding);
+            
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font, we'll scale it
+            
+            // Set large font size for presentation
+            float font_scale = userSettings.presentation.fontSize / ImGui::GetFontSize();
+            ImGui::SetWindowFontScale(font_scale);
+            
+            // Calculate text size and position for centering
+            ImVec2 verse_size = ImGui::CalcTextSize(current_displayed_verse.c_str(), nullptr, false, available_width);
+            ImVec2 ref_size = ImVec2(0, 0);
+            if (userSettings.presentation.showReference && !current_displayed_reference.empty()) {
+                ref_size = ImGui::CalcTextSize(current_displayed_reference.c_str());
+            }
+            
+            float total_height = verse_size.y;
+            if (userSettings.presentation.showReference) {
+                total_height += ref_size.y + 20; // Add spacing
+            }
+            
+            float start_y = (available_height - total_height) / 2;
+            if (start_y < 0) start_y = 0;
+            
+            ImGui::SetCursorPos(ImVec2(userSettings.presentation.textPadding, userSettings.presentation.textPadding + start_y));
+            
+            // Display verse text
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(text_r, text_g, text_b, presentation_fade_alpha));
+            
+            if (userSettings.presentation.textAlignment == "center") {
+                float text_width = ImGui::CalcTextSize(current_displayed_verse.c_str(), nullptr, false, available_width).x;
+                if (text_width < available_width) {
+                    ImGui::SetCursorPosX(userSettings.presentation.textPadding + (available_width - text_width) / 2);
+                }
+            } else if (userSettings.presentation.textAlignment == "right") {
+                float text_width = ImGui::CalcTextSize(current_displayed_verse.c_str(), nullptr, false, available_width).x;
+                if (text_width < available_width) {
+                    ImGui::SetCursorPosX(userSettings.presentation.textPadding + available_width - text_width);
+                }
+            }
+            
+            ImGui::TextWrapped("%s", current_displayed_verse.c_str());
+            ImGui::PopStyleColor();
+            
+            // Display reference if enabled
+            if (userSettings.presentation.showReference && !current_displayed_reference.empty()) {
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ref_r, ref_g, ref_b, presentation_fade_alpha));
+                
+                if (userSettings.presentation.textAlignment == "center") {
+                    float ref_width = ImGui::CalcTextSize(current_displayed_reference.c_str()).x;
+                    if (ref_width < available_width) {
+                        ImGui::SetCursorPosX(userSettings.presentation.textPadding + (available_width - ref_width) / 2);
+                    }
+                } else if (userSettings.presentation.textAlignment == "right") {
+                    float ref_width = ImGui::CalcTextSize(current_displayed_reference.c_str()).x;
+                    if (ref_width < available_width) {
+                        ImGui::SetCursorPosX(userSettings.presentation.textPadding + available_width - ref_width);
+                    }
+                }
+                
+                ImGui::Text("%s", current_displayed_reference.c_str());
+                ImGui::PopStyleColor();
+            }
+            
+            ImGui::PopFont();
+            ImGui::PopStyleVar();
+        }
+    }
+    ImGui::End();
+    
+    // Render
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    
+    glfwSwapBuffers(presentation_window);
+    
+    // Switch back to main window context
+    glfwMakeContextCurrent(window);
+}
+
+void VerseFinderApp::renderPresentationPreview() {
+    if (!userSettings.presentation.enabled) {
+        return;
+    }
+    
+    ImGui::Separator();
+    ImGui::Text("📺 Presentation Preview");
+    
+    // Create a bordered child window for preview
+    ImVec2 preview_size(400, 225); // 16:9 aspect ratio
+    
+    if (ImGui::BeginChild("PresentationPreview", preview_size, true)) {
+        // Parse background color for preview
+        float bg_r = 0.0f, bg_g = 0.0f, bg_b = 0.0f;
+        if (userSettings.presentation.backgroundColor.length() == 7 && userSettings.presentation.backgroundColor[0] == '#') {
+            std::string hex = userSettings.presentation.backgroundColor.substr(1);
+            bg_r = std::stoi(hex.substr(0, 2), 0, 16) / 255.0f;
+            bg_g = std::stoi(hex.substr(2, 2), 0, 16) / 255.0f;
+            bg_b = std::stoi(hex.substr(4, 2), 0, 16) / 255.0f;
+        }
+        
+        // Draw background
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+        ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+        ImVec2 canvas_size = ImGui::GetContentRegionAvail();
+        draw_list->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), 
+                                IM_COL32(bg_r * 255, bg_g * 255, bg_b * 255, 255));
+        
+        if (!presentation_blank_screen && !current_displayed_verse.empty()) {
+            // Display preview text (smaller scale)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            
+            float scale = 0.3f; // Scale down for preview
+            ImGui::SetWindowFontScale(scale);
+            
+            // Center the text
+            ImVec2 text_size = ImGui::CalcTextSize(current_displayed_verse.c_str(), nullptr, false, canvas_size.x);
+            float start_y = (canvas_size.y - text_size.y) / 2;
+            if (start_y < 0) start_y = 0;
+            
+            ImGui::SetCursorPos(ImVec2(10, start_y));
+            ImGui::TextWrapped("%s", current_displayed_verse.c_str());
+            
+            if (userSettings.presentation.showReference && !current_displayed_reference.empty()) {
+                ImGui::Text("%s", current_displayed_reference.c_str());
+            }
+            
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::PopStyleColor();
+        } else if (presentation_blank_screen) {
+            // Show "BLANK" indicator in preview
+            ImGui::SetCursorPos(ImVec2(canvas_size.x / 2 - 30, canvas_size.y / 2 - 10));
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "BLANK");
+        }
+    }
+    ImGui::EndChild();
+    
+    // Presentation controls
+    ImGui::Spacing();
+    
+    if (!presentation_mode_active) {
+        if (ImGui::Button("🚀 Start Presentation Mode")) {
+            togglePresentationMode();
+        }
+    } else {
+        if (ImGui::Button("⏹️ Stop Presentation Mode")) {
+            togglePresentationMode();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(presentation_blank_screen ? "📺 Show Display" : "⬛ Blank Screen")) {
+            toggleBlankScreen();
+        }
+    }
+}
+
+void VerseFinderApp::togglePresentationMode() {
+    if (!presentation_mode_active) {
+        initPresentationWindow();
+        if (presentation_window) {
+            presentation_mode_active = true;
+            userSettings.presentation.enabled = true;
+        }
+    } else {
+        destroyPresentationWindow();
+        presentation_mode_active = false;
+    }
+}
+
+void VerseFinderApp::displayVerseOnPresentation(const std::string& verse_text, const std::string& reference) {
+    current_displayed_verse = verse_text;
+    current_displayed_reference = reference;
+    presentation_blank_screen = false;
+    presentation_fade_alpha = 1.0f;
+}
+
+void VerseFinderApp::clearPresentationDisplay() {
+    current_displayed_verse.clear();
+    current_displayed_reference.clear();
+}
+
+void VerseFinderApp::toggleBlankScreen() {
+    presentation_blank_screen = !presentation_blank_screen;
+}
+
+bool VerseFinderApp::isPresentationWindowActive() const {
+    return presentation_window != nullptr && presentation_mode_active;
+}
+
+void VerseFinderApp::updatePresentationMonitorPosition() {
+    if (!presentation_window) {
+        return;
+    }
+    
+    // Recreate window with new position
+    destroyPresentationWindow();
+    initPresentationWindow();
+}
+
+std::vector<GLFWmonitor*> VerseFinderApp::getAvailableMonitors() const {
+    std::vector<GLFWmonitor*> monitors;
+    int count;
+    GLFWmonitor** monitor_array = glfwGetMonitors(&count);
+    
+    for (int i = 0; i < count; i++) {
+        monitors.push_back(monitor_array[i]);
+    }
+    
+    return monitors;
+}
+
 void VerseFinderApp::cleanup() {
+    // Cleanup presentation window first
+    destroyPresentationWindow();
+    
     if (window) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();

@@ -77,13 +77,65 @@ void from_json(const json& j, ContentSettings& settings) {
     j.at("saveSearchHistory").get_to(settings.saveSearchHistory);
 }
 
+// PresentationSettings JSON serialization
+void to_json(json& j, const PresentationSettings& settings) {
+    j = json{
+        {"enabled", settings.enabled},
+        {"fontSize", settings.fontSize},
+        {"fontFamily", settings.fontFamily},
+        {"backgroundColor", settings.backgroundColor},
+        {"textColor", settings.textColor},
+        {"referenceColor", settings.referenceColor},
+        {"showReference", settings.showReference},
+        {"showBackground", settings.showBackground},
+        {"backgroundImagePath", settings.backgroundImagePath},
+        {"windowWidth", settings.windowWidth},
+        {"windowHeight", settings.windowHeight},
+        {"windowPosX", settings.windowPosX},
+        {"windowPosY", settings.windowPosY},
+        {"monitorIndex", settings.monitorIndex},
+        {"fullscreen", settings.fullscreen},
+        {"obsOptimized", settings.obsOptimized},
+        {"windowTitle", settings.windowTitle},
+        {"autoHideCursor", settings.autoHideCursor},
+        {"fadeTransitionTime", settings.fadeTransitionTime},
+        {"textAlignment", settings.textAlignment},
+        {"textPadding", settings.textPadding}
+    };
+}
+
+void from_json(const json& j, PresentationSettings& settings) {
+    j.at("enabled").get_to(settings.enabled);
+    j.at("fontSize").get_to(settings.fontSize);
+    j.at("fontFamily").get_to(settings.fontFamily);
+    j.at("backgroundColor").get_to(settings.backgroundColor);
+    j.at("textColor").get_to(settings.textColor);
+    j.at("referenceColor").get_to(settings.referenceColor);
+    j.at("showReference").get_to(settings.showReference);
+    j.at("showBackground").get_to(settings.showBackground);
+    j.at("backgroundImagePath").get_to(settings.backgroundImagePath);
+    j.at("windowWidth").get_to(settings.windowWidth);
+    j.at("windowHeight").get_to(settings.windowHeight);
+    j.at("windowPosX").get_to(settings.windowPosX);
+    j.at("windowPosY").get_to(settings.windowPosY);
+    j.at("monitorIndex").get_to(settings.monitorIndex);
+    j.at("fullscreen").get_to(settings.fullscreen);
+    j.at("obsOptimized").get_to(settings.obsOptimized);
+    j.at("windowTitle").get_to(settings.windowTitle);
+    j.at("autoHideCursor").get_to(settings.autoHideCursor);
+    j.at("fadeTransitionTime").get_to(settings.fadeTransitionTime);
+    j.at("textAlignment").get_to(settings.textAlignment);
+    j.at("textPadding").get_to(settings.textPadding);
+}
+
 // UserSettings JSON serialization
 void to_json(json& j, const UserSettings& settings) {
     j = json{
         {"version", settings.version},
         {"display", settings.display},
         {"search", settings.search},
-        {"content", settings.content}
+        {"content", settings.content},
+        {"presentation", settings.presentation}
     };
 }
 
@@ -92,6 +144,14 @@ void from_json(const json& j, UserSettings& settings) {
     j.at("display").get_to(settings.display);
     j.at("search").get_to(settings.search);
     j.at("content").get_to(settings.content);
+    
+    // Handle presentation settings with backwards compatibility
+    if (j.contains("presentation")) {
+        j.at("presentation").get_to(settings.presentation);
+    } else {
+        // Use default values if not present in old settings
+        settings.presentation = PresentationSettings{};
+    }
 }
 
 // UserSettings implementation
@@ -131,6 +191,7 @@ void UserSettings::applyDefaults() {
     display = DisplaySettings{};
     search = SearchSettings{};
     content = ContentSettings{};
+    presentation = PresentationSettings{};
     version = "1.0";
 }
 

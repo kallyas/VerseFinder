@@ -5,12 +5,18 @@
 #include <regex>
 #include <ctime>
 #include <cstdlib>
-#include <mach-o/dyld.h>
 #include <thread>
 #include <future>
 #ifdef __APPLE__
+#include <mach-o/dyld.h>
 #include <objc/objc-runtime.h>
 #include <CoreText/CoreText.h>
+#include <climits>
+#elif defined(__linux__)
+#include <unistd.h>
+#include <climits>
+#elif defined(_WIN32)
+#include <windows.h>
 #endif
 
 VerseFinderApp::VerseFinderApp() : window(nullptr) {}
@@ -39,11 +45,24 @@ void VerseFinderApp::glfwErrorCallback(int error, const char* description) {
 }
 
 std::string VerseFinderApp::getExecutablePath() const {
+#ifdef __APPLE__
     char buffer[PATH_MAX];
     uint32_t path_len = sizeof(buffer);
     if (_NSGetExecutablePath(buffer, &path_len) == 0) {
         return std::filesystem::path(buffer).parent_path().string();
     }
+#elif defined(__linux__)
+    char buffer[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (len != -1) {
+        buffer[len] = '\0';
+        return std::filesystem::path(buffer).parent_path().string();
+    }
+#elif defined(_WIN32)
+    char buffer[MAX_PATH];
+    GetModuleFileNameA(NULL, buffer, MAX_PATH);
+    return std::filesystem::path(buffer).parent_path().string();
+#endif
     return "";
 }
 

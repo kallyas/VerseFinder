@@ -20,6 +20,7 @@
 
 #include "../core/VerseFinder.h"
 #include "../core/FuzzySearch.h"
+#include "../core/UserSettings.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -49,6 +50,9 @@ class VerseFinderApp {
 private:
     // Core GLFW and OpenGL components
     GLFWwindow* window;
+    
+    // User settings
+    UserSettings userSettings;
     
     // Core application state
     VerseFinder bible;
@@ -85,6 +89,9 @@ private:
     // UI styling
     void setupImGuiStyle();
     void applyDarkTheme();
+    void applyLightTheme();
+    void applyBlueTheme();
+    void applyGreenTheme();
     
     // Available translations for download
     std::vector<AvailableTranslation> available_translations = {
@@ -148,8 +155,12 @@ private:
     
     // File operations
     std::string getExecutablePath() const;
+    std::string getSettingsFilePath() const;
     bool saveSettings() const;
     bool loadSettings();
+    void resetSettingsToDefault();
+    bool exportSettings(const std::string& filepath) const;
+    bool importSettings(const std::string& filepath);
     
     // Font utilities
     float getSystemFontSize() const;

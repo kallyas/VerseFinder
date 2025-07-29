@@ -1,6 +1,7 @@
 #include "VerseFinderApp.h"
 #include <iostream>
 #include <filesystem>
+#include <fstream>
 #include <algorithm>
 #include <regex>
 #include <ctime>
@@ -15,8 +16,10 @@
 #elif defined(__linux__)
 #include <unistd.h>
 #include <climits>
+#include <pwd.h>
 #elif defined(_WIN32)
 #include <windows.h>
+#include <shlobj.h>
 #endif
 
 VerseFinderApp::VerseFinderApp() : window(nullptr) {}
@@ -66,7 +69,54 @@ std::string VerseFinderApp::getExecutablePath() const {
     return "";
 }
 
+std::string VerseFinderApp::getSettingsFilePath() const {
+    std::string settingsDir;
+    
+#ifdef __APPLE__
+    // Use ~/Library/Application Support/VerseFinder/ on macOS
+    const char* home = getenv("HOME");
+    if (home) {
+        settingsDir = std::string(home) + "/Library/Application Support/VerseFinder";
+    }
+#elif defined(__linux__)
+    // Use ~/.config/VerseFinder/ on Linux (XDG Base Directory)
+    const char* configHome = getenv("XDG_CONFIG_HOME");
+    if (configHome) {
+        settingsDir = std::string(configHome) + "/VerseFinder";
+    } else {
+        const char* home = getenv("HOME");
+        if (home) {
+            settingsDir = std::string(home) + "/.config/VerseFinder";
+        }
+    }
+#elif defined(_WIN32)
+    // Use %APPDATA%/VerseFinder/ on Windows
+    char appDataPath[MAX_PATH];
+    if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath) == S_OK) {
+        settingsDir = std::string(appDataPath) + "\\VerseFinder";
+    }
+#endif
+    
+    // Fallback to executable directory if platform-specific path fails
+    if (settingsDir.empty()) {
+        settingsDir = getExecutablePath();
+    }
+    
+    // Create directory if it doesn't exist
+    try {
+        std::filesystem::create_directories(settingsDir);
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to create settings directory: " << e.what() << std::endl;
+        return getExecutablePath() + "/settings.json"; // Fallback
+    }
+    
+    return settingsDir + "/settings.json";
+}
+
 bool VerseFinderApp::init() {
+    // Load settings first
+    loadSettings();
+    
     // Setup error callback
     glfwSetErrorCallback(glfwErrorCallback);
     
@@ -85,12 +135,20 @@ bool VerseFinderApp::init() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
 #endif
     
-    // Create window
-    window = glfwCreateWindow(1400, 900, "VerseFinder - Bible Search for Churches", nullptr, nullptr);
+    // Create window with saved size or defaults
+    int windowWidth = userSettings.display.windowWidth;
+    int windowHeight = userSettings.display.windowHeight;
+    window = glfwCreateWindow(windowWidth, windowHeight, "VerseFinder - Bible Search for Churches", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return false;
+    }
+    
+    // Set window position if saved and valid
+    if (userSettings.display.rememberWindowState && 
+        userSettings.display.windowPosX >= 0 && userSettings.display.windowPosY >= 0) {
+        glfwSetWindowPos(window, userSettings.display.windowPosX, userSettings.display.windowPosY);
     }
     
     glfwMakeContextCurrent(window);
@@ -170,13 +228,27 @@ bool VerseFinderApp::init() {
     // Scan for existing translation files and update status
     scanForExistingTranslations();
     updateAvailableTranslationStatus();
-    loadSettings();
+    
+    // Apply loaded settings to application state
+    fuzzy_search_enabled = userSettings.search.fuzzySearchEnabled;
+    bible.enableFuzzySearch(fuzzy_search_enabled);
+    auto_search = userSettings.search.autoSearch;
+    show_performance_stats = userSettings.search.showPerformanceStats;
     
     return true;
 }
 
 void VerseFinderApp::setupImGuiStyle() {
-    applyDarkTheme();
+    // Apply theme based on user settings
+    if (userSettings.display.colorTheme == "light") {
+        applyLightTheme();
+    } else if (userSettings.display.colorTheme == "blue") {
+        applyBlueTheme();
+    } else if (userSettings.display.colorTheme == "green") {
+        applyGreenTheme();
+    } else {
+        applyDarkTheme(); // Default to dark theme
+    }
     
     ImGuiStyle& style = ImGui::GetStyle();
     
@@ -202,6 +274,9 @@ void VerseFinderApp::setupImGuiStyle() {
     style.IndentSpacing = 20.0f;
     style.ScrollbarSize = 16.0f;
     style.GrabMinSize = 12.0f;
+    
+    // Apply font scaling
+    ImGui::GetIO().FontGlobalScale = userSettings.display.fontSize / 16.0f;
 }
 
 void VerseFinderApp::applyDarkTheme() {
@@ -260,6 +335,186 @@ void VerseFinderApp::applyDarkTheme() {
     colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
     colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
     colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+}
+
+void VerseFinderApp::applyLightTheme() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4* colors = style.Colors;
+    
+    // Light theme colors
+    colors[ImGuiCol_Text] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
+    colors[ImGuiCol_WindowBg] = ImVec4(0.94f, 0.94f, 0.94f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_PopupBg] = ImVec4(1.00f, 1.00f, 1.00f, 0.98f);
+    colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.30f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.96f, 0.96f, 0.96f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.82f, 0.82f, 0.82f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(1.00f, 1.00f, 1.00f, 0.51f);
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.86f, 0.86f, 0.86f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.98f, 0.98f, 0.98f, 0.53f);
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.69f, 0.69f, 0.69f, 0.80f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.49f, 0.49f, 0.49f, 0.80f);
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.49f, 0.49f, 0.49f, 1.00f);
+    colors[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.26f, 0.59f, 0.98f, 0.78f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.46f, 0.54f, 0.80f, 0.60f);
+    colors[ImGuiCol_Button] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.39f, 0.39f, 0.39f, 0.62f);
+    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.14f, 0.44f, 0.80f, 0.78f);
+    colors[ImGuiCol_SeparatorActive] = ImVec4(0.14f, 0.44f, 0.80f, 1.00f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(0.35f, 0.35f, 0.35f, 0.17f);
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    colors[ImGuiCol_Tab] = ImVec4(0.76f, 0.80f, 0.84f, 0.93f);
+    colors[ImGuiCol_TabHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.60f, 0.73f, 0.88f, 1.00f);
+    colors[ImGuiCol_TabUnfocused] = ImVec4(0.92f, 0.93f, 0.94f, 0.99f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.74f, 0.82f, 0.91f, 1.00f);
+    colors[ImGuiCol_PlotLines] = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.45f, 0.00f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.78f, 0.87f, 0.98f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.57f, 0.57f, 0.64f, 1.00f);
+    colors[ImGuiCol_TableBorderLight] = ImVec4(0.68f, 0.68f, 0.74f, 1.00f);
+    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.30f, 0.30f, 0.30f, 0.09f);
+    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+    colors[ImGuiCol_DragDropTarget] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.70f, 0.70f, 0.70f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
+}
+
+void VerseFinderApp::applyBlueTheme() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4* colors = style.Colors;
+    
+    // Blue theme colors (dark blue base)
+    colors[ImGuiCol_Text] = ImVec4(0.90f, 0.95f, 1.00f, 1.00f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.60f, 0.70f, 1.00f);
+    colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.08f, 0.16f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.08f, 0.12f, 0.20f, 1.00f);
+    colors[ImGuiCol_PopupBg] = ImVec4(0.04f, 0.06f, 0.12f, 0.95f);
+    colors[ImGuiCol_Border] = ImVec4(0.20f, 0.30f, 0.50f, 0.60f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.15f, 0.25f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.15f, 0.25f, 0.40f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.20f, 0.35f, 0.55f, 1.00f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.06f, 0.12f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.29f, 0.48f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.08f, 0.12f, 0.20f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.04f, 0.08f, 0.53f);
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.25f, 0.35f, 0.55f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.35f, 0.45f, 0.65f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.45f, 0.55f, 0.75f, 1.00f);
+    colors[ImGuiCol_CheckMark] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.35f, 0.60f, 0.95f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.45f, 0.70f, 1.00f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.20f, 0.40f, 0.80f, 0.60f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.50f, 0.90f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.15f, 0.35f, 0.75f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.20f, 0.40f, 0.80f, 0.45f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.30f, 0.50f, 0.90f, 0.80f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.25f, 0.45f, 0.85f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.20f, 0.30f, 0.50f, 0.60f);
+    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.30f, 0.50f, 0.80f, 0.78f);
+    colors[ImGuiCol_SeparatorActive] = ImVec4(0.35f, 0.55f, 0.85f, 1.00f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(0.20f, 0.40f, 0.80f, 0.25f);
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.30f, 0.50f, 0.90f, 0.67f);
+    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.35f, 0.55f, 0.95f, 0.95f);
+    colors[ImGuiCol_Tab] = ImVec4(0.12f, 0.25f, 0.50f, 0.86f);
+    colors[ImGuiCol_TabHovered] = ImVec4(0.30f, 0.50f, 0.90f, 0.80f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.35f, 0.70f, 1.00f);
+    colors[ImGuiCol_TabUnfocused] = ImVec4(0.05f, 0.08f, 0.15f, 0.97f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.12f, 0.20f, 0.40f, 1.00f);
+    colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.12f, 0.20f, 0.35f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.25f, 0.35f, 0.55f, 1.00f);
+    colors[ImGuiCol_TableBorderLight] = ImVec4(0.18f, 0.28f, 0.45f, 1.00f);
+    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.30f, 0.50f, 0.90f, 0.35f);
+    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight] = ImVec4(0.30f, 0.50f, 0.90f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+}
+
+void VerseFinderApp::applyGreenTheme() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4* colors = style.Colors;
+    
+    // Green theme colors (dark green base)
+    colors[ImGuiCol_Text] = ImVec4(0.90f, 1.00f, 0.90f, 1.00f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.70f, 0.50f, 1.00f);
+    colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.16f, 0.08f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.12f, 0.20f, 0.12f, 1.00f);
+    colors[ImGuiCol_PopupBg] = ImVec4(0.06f, 0.12f, 0.06f, 0.95f);
+    colors[ImGuiCol_Border] = ImVec4(0.30f, 0.50f, 0.30f, 0.60f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.25f, 0.15f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.40f, 0.25f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.55f, 0.35f, 1.00f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.06f, 0.12f, 0.06f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.29f, 0.48f, 0.29f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.12f, 0.20f, 0.12f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.04f, 0.08f, 0.04f, 0.53f);
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.55f, 0.35f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.65f, 0.45f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.75f, 0.55f, 1.00f);
+    colors[ImGuiCol_CheckMark] = ImVec4(0.70f, 1.00f, 0.70f, 1.00f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.60f, 0.95f, 0.60f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.70f, 1.00f, 0.70f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.40f, 0.80f, 0.40f, 0.60f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.50f, 0.90f, 0.50f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.35f, 0.75f, 0.35f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.40f, 0.80f, 0.40f, 0.45f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.50f, 0.90f, 0.50f, 0.80f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.45f, 0.85f, 0.45f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.30f, 0.50f, 0.30f, 0.60f);
+    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.50f, 0.80f, 0.50f, 0.78f);
+    colors[ImGuiCol_SeparatorActive] = ImVec4(0.55f, 0.85f, 0.55f, 1.00f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(0.40f, 0.80f, 0.40f, 0.25f);
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.50f, 0.90f, 0.50f, 0.67f);
+    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.55f, 0.95f, 0.55f, 0.95f);
+    colors[ImGuiCol_Tab] = ImVec4(0.25f, 0.50f, 0.25f, 0.86f);
+    colors[ImGuiCol_TabHovered] = ImVec4(0.50f, 0.90f, 0.50f, 0.80f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.35f, 0.70f, 0.35f, 1.00f);
+    colors[ImGuiCol_TabUnfocused] = ImVec4(0.08f, 0.15f, 0.08f, 0.97f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.20f, 0.40f, 0.20f, 1.00f);
+    colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.20f, 0.35f, 0.20f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.35f, 0.55f, 0.35f, 1.00f);
+    colors[ImGuiCol_TableBorderLight] = ImVec4(0.28f, 0.45f, 0.28f, 1.00f);
+    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.50f, 0.90f, 0.50f, 0.35f);
+    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight] = ImVec4(0.50f, 0.90f, 0.50f, 1.00f);
     colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
     colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
     colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
@@ -408,6 +663,21 @@ void VerseFinderApp::renderSearchArea() {
     bool search_changed = ImGui::InputTextWithHint("##search", "Enter verse reference (e.g., 'John 3:16') or keywords...", 
                                                   search_input, sizeof(search_input), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::PopItemWidth();
+    
+    // Search history dropdown (if history exists)
+    if (!userSettings.content.searchHistory.empty()) {
+        ImGui::Spacing();
+        if (ImGui::BeginCombo("🕒 Recent Searches", nullptr)) {
+            for (const auto& historical_search : userSettings.content.searchHistory) {
+                if (ImGui::Selectable(historical_search.c_str())) {
+                    strncpy(search_input, historical_search.c_str(), sizeof(search_input) - 1);
+                    search_input[sizeof(search_input) - 1] = '\0';
+                    performSearch();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
     
     // Auto-search or manual search
     if (search_changed || (auto_search && strcmp(search_input, last_search_query.c_str()) != 0)) {
@@ -581,6 +851,12 @@ void VerseFinderApp::renderSearchResults() {
             ImGui::Text("%s", verse_text.c_str());
         } else {
             // Regular search result display
+            // Show favorite star if this verse is favorited
+            bool isFavorite = userSettings.isFavoriteVerse(result);
+            if (isFavorite) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "⭐");
+                ImGui::SameLine();
+            }
             ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
             
             // Verse text with word wrapping
@@ -622,6 +898,28 @@ void VerseFinderApp::renderSearchResults() {
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
             selectResult(static_cast<int>(i));
             show_verse_modal = true;
+        }
+        
+        // Right-click context menu
+        if (ImGui::BeginPopupContextItem(("context_" + std::to_string(i)).c_str())) {
+            bool isFavorite = userSettings.isFavoriteVerse(result);
+            if (isFavorite) {
+                if (ImGui::MenuItem("💔 Remove from Favorites")) {
+                    userSettings.removeFavoriteVerse(result);
+                }
+            } else {
+                if (ImGui::MenuItem("⭐ Add to Favorites")) {
+                    userSettings.addFavoriteVerse(result);
+                }
+            }
+            if (ImGui::MenuItem("📋 Copy to Clipboard")) {
+                copyToClipboard(result);
+            }
+            if (ImGui::MenuItem("🔍 View Full Verse")) {
+                selectResult(static_cast<int>(i));
+                show_verse_modal = true;
+            }
+            ImGui::EndPopup();
         }
         
         ImGui::EndChild();
@@ -860,25 +1158,162 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Text("Customize the appearance of VerseFinder");
                 ImGui::Separator();
                 
-                static bool dark_theme = true;
-                if (ImGui::Checkbox("Dark Theme", &dark_theme)) {
-                    setupImGuiStyle();
+                // Font Settings
+                ImGui::Text("🔤 Font Settings");
+                ImGui::Spacing();
+                
+                // Font size slider
+                float fontSize = userSettings.display.fontSize;
+                if (ImGui::SliderFloat("Font Size", &fontSize, 8.0f, 36.0f, "%.1f")) {
+                    userSettings.display.fontSize = fontSize;
+                    // Apply font size change immediately
+                    ImGui::GetIO().FontGlobalScale = fontSize / 16.0f; // Relative to default 16px
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Adjust text size for better readability");
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Theme Settings
+                ImGui::Text("🎨 Color Theme");
+                ImGui::Spacing();
+                
+                // Theme selection
+                const char* themes[] = { "Dark", "Light", "Blue", "Green" };
+                int currentTheme = 0;
+                if (userSettings.display.colorTheme == "light") currentTheme = 1;
+                else if (userSettings.display.colorTheme == "blue") currentTheme = 2;
+                else if (userSettings.display.colorTheme == "green") currentTheme = 3;
+                
+                if (ImGui::Combo("Color Theme", &currentTheme, themes, IM_ARRAYSIZE(themes))) {
+                    switch (currentTheme) {
+                        case 0: userSettings.display.colorTheme = "dark"; break;
+                        case 1: userSettings.display.colorTheme = "light"; break;
+                        case 2: userSettings.display.colorTheme = "blue"; break;
+                        case 3: userSettings.display.colorTheme = "green"; break;
+                    }
+                    setupImGuiStyle(); // Apply theme immediately
                 }
                 
-                ImGui::Text("Font scaling and other appearance options will be added here.");
+                ImGui::Spacing();
+                
+                // Color customization
+                ImVec4 highlightColor = ImVec4(1.0f, 0.84f, 0.0f, 1.0f); // Default gold
+                if (ImGui::ColorEdit3("Highlight Color", (float*)&highlightColor)) {
+                    char colorHex[16];
+                    sprintf(colorHex, "#%02X%02X%02X", 
+                           (int)(highlightColor.x * 255), 
+                           (int)(highlightColor.y * 255), 
+                           (int)(highlightColor.z * 255));
+                    userSettings.display.highlightColor = colorHex;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Color used for highlighting search results");
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Window Settings
+                ImGui::Text("🖼️ Window Settings");
+                ImGui::Spacing();
+                
+                bool rememberWindow = userSettings.display.rememberWindowState;
+                if (ImGui::Checkbox("Remember Window Size & Position", &rememberWindow)) {
+                    userSettings.display.rememberWindowState = rememberWindow;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Save window layout between sessions");
+                
+                if (userSettings.display.rememberWindowState) {
+                    ImGui::Spacing();
+                    ImGui::Text("Current window: %dx%d", userSettings.display.windowWidth, userSettings.display.windowHeight);
+                    if (ImGui::Button("Reset Window Size")) {
+                        glfwSetWindowSize(window, 1400, 900);
+                        glfwSetWindowPos(window, 100, 100);
+                    }
+                }
                 
                 ImGui::EndTabItem();
             }
             
             if (ImGui::BeginTabItem("🔍 Search")) {
-                ImGui::Text("Configure search behavior and fuzzy matching");
+                ImGui::Text("Configure search behavior and preferences");
+                ImGui::Separator();
+                
+                // General Search Settings
+                ImGui::Text("⚙️ General Search Settings");
+                ImGui::Spacing();
+                
+                // Default translation
+                if (ImGui::BeginCombo("Default Translation", userSettings.search.defaultTranslation.c_str())) {
+                    for (const auto& trans : bible.getTranslations()) {
+                        bool isSelected = (userSettings.search.defaultTranslation == trans.abbreviation);
+                        if (ImGui::Selectable(trans.abbreviation.c_str(), isSelected)) {
+                            userSettings.search.defaultTranslation = trans.abbreviation;
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Translation to use when app starts");
+                
+                ImGui::Spacing();
+                
+                // Max search results
+                int maxResults = userSettings.search.maxSearchResults;
+                if (ImGui::SliderInt("Max Search Results", &maxResults, 10, 200)) {
+                    userSettings.search.maxSearchResults = maxResults;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Maximum number of verses to show in search results");
+                
+                ImGui::Spacing();
+                
+                // Auto search
+                bool autoSearchSetting = userSettings.search.autoSearch;
+                if (ImGui::Checkbox("Auto Search", &autoSearchSetting)) {
+                    userSettings.search.autoSearch = autoSearchSetting;
+                    auto_search = autoSearchSetting;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Search automatically as you type");
+                
+                ImGui::Spacing();
+                
+                // Search result format
+                const char* formats[] = { "Reference + Text", "Text Only", "Reference Only" };
+                int currentFormat = 0;
+                if (userSettings.search.searchResultFormat == "text_only") currentFormat = 1;
+                else if (userSettings.search.searchResultFormat == "reference_only") currentFormat = 2;
+                
+                if (ImGui::Combo("Search Result Format", &currentFormat, formats, IM_ARRAYSIZE(formats))) {
+                    switch (currentFormat) {
+                        case 0: userSettings.search.searchResultFormat = "reference_text"; break;
+                        case 1: userSettings.search.searchResultFormat = "text_only"; break;
+                        case 2: userSettings.search.searchResultFormat = "reference_only"; break;
+                    }
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "How to display search results");
+                
+                ImGui::Spacing();
+                
+                // Performance stats
+                bool showPerfStats = userSettings.search.showPerformanceStats;
+                if (ImGui::Checkbox("Show Performance Statistics", &showPerfStats)) {
+                    userSettings.search.showPerformanceStats = showPerfStats;
+                    show_performance_stats = showPerfStats;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Display search timing information");
+                
+                ImGui::Spacing();
                 ImGui::Separator();
                 
                 // Fuzzy search settings
                 ImGui::Text("🎯 Fuzzy Search Settings");
                 ImGui::Spacing();
                 
-                if (ImGui::Checkbox("Enable Fuzzy Search", &fuzzy_search_enabled)) {
+                bool fuzzyEnabled = userSettings.search.fuzzySearchEnabled;
+                if (ImGui::Checkbox("Enable Fuzzy Search", &fuzzyEnabled)) {
+                    userSettings.search.fuzzySearchEnabled = fuzzyEnabled;
+                    fuzzy_search_enabled = fuzzyEnabled;
                     bible.enableFuzzySearch(fuzzy_search_enabled);
                 }
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Find verses even with typos and approximate matches");
@@ -943,6 +1378,124 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
+            if (ImGui::BeginTabItem("📚 Content")) {
+                ImGui::Text("Manage favorites, history, and content preferences");
+                ImGui::Separator();
+                
+                // Favorites section
+                ImGui::Text("⭐ Favorite Verses");
+                ImGui::Spacing();
+                
+                ImGui::Text("Saved favorites: %zu", userSettings.content.favoriteVerses.size());
+                
+                if (ImGui::BeginListBox("##FavoritesList", ImVec2(-1, 120))) {
+                    for (size_t i = 0; i < userSettings.content.favoriteVerses.size(); i++) {
+                        const std::string& verse = userSettings.content.favoriteVerses[i];
+                        bool selected = false;
+                        if (ImGui::Selectable(verse.c_str(), selected)) {
+                            // Could add functionality to jump to this verse
+                        }
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                            // Remove from favorites on double-click
+                            userSettings.removeFavoriteVerse(verse);
+                        }
+                    }
+                    ImGui::EndListBox();
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Double-click to remove from favorites");
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Search History section
+                ImGui::Text("🕒 Search History");
+                ImGui::Spacing();
+                
+                bool saveHistory = userSettings.content.saveSearchHistory;
+                if (ImGui::Checkbox("Save Search History", &saveHistory)) {
+                    userSettings.content.saveSearchHistory = saveHistory;
+                }
+                
+                if (userSettings.content.saveSearchHistory) {
+                    ImGui::Spacing();
+                    
+                    int maxHistory = userSettings.content.maxHistoryEntries;
+                    if (ImGui::SliderInt("Max History Entries", &maxHistory, 10, 500)) {
+                        userSettings.content.maxHistoryEntries = maxHistory;
+                    }
+                    
+                    ImGui::Spacing();
+                    ImGui::Text("Recent searches: %zu", userSettings.content.searchHistory.size());
+                    
+                    if (ImGui::BeginListBox("##HistoryList", ImVec2(-1, 100))) {
+                        for (const auto& search : userSettings.content.searchHistory) {
+                            ImGui::Selectable(search.c_str(), false);
+                        }
+                        ImGui::EndListBox();
+                    }
+                    
+                    if (ImGui::Button("Clear History")) {
+                        userSettings.content.searchHistory.clear();
+                    }
+                }
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Verse Display Format
+                ImGui::Text("📝 Verse Display");
+                ImGui::Spacing();
+                
+                const char* displayFormats[] = { "Standard", "Compact", "Detailed" };
+                int currentDisplayFormat = 0;
+                if (userSettings.content.verseDisplayFormat == "compact") currentDisplayFormat = 1;
+                else if (userSettings.content.verseDisplayFormat == "detailed") currentDisplayFormat = 2;
+                
+                if (ImGui::Combo("Verse Display Format", &currentDisplayFormat, displayFormats, IM_ARRAYSIZE(displayFormats))) {
+                    switch (currentDisplayFormat) {
+                        case 0: userSettings.content.verseDisplayFormat = "standard"; break;
+                        case 1: userSettings.content.verseDisplayFormat = "compact"; break;
+                        case 2: userSettings.content.verseDisplayFormat = "detailed"; break;
+                    }
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "How verses are formatted when displayed");
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Recent Translations
+                ImGui::Text("🔄 Recent Translations");
+                ImGui::Spacing();
+                
+                ImGui::Text("Recently used: %zu", userSettings.content.recentTranslations.size());
+                for (const auto& trans : userSettings.content.recentTranslations) {
+                    ImGui::BulletText("%s", trans.c_str());
+                }
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Quick Stats and Actions
+                ImGui::Text("📊 Quick Stats");
+                ImGui::Spacing();
+                
+                ImGui::Text("Total favorites: %zu", userSettings.content.favoriteVerses.size());
+                ImGui::Text("Search history entries: %zu", userSettings.content.searchHistory.size());
+                ImGui::Text("Recent translations: %zu", userSettings.content.recentTranslations.size());
+                
+                ImGui::Spacing();
+                
+                if (ImGui::Button("🗑️ Clear All History")) {
+                    userSettings.content.searchHistory.clear();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("⭐ Clear Favorites")) {
+                    userSettings.content.favoriteVerses.clear();
+                }
+                
+                ImGui::EndTabItem();
+            }
+            
             if (ImGui::BeginTabItem("⌨️ Shortcuts")) {
                 ImGui::Text("Keyboard shortcuts for VerseFinder");
                 ImGui::Separator();
@@ -962,10 +1515,53 @@ void VerseFinderApp::renderSettingsWindow() {
         }
         
         ImGui::Separator();
+        
+        // Settings management buttons
         if (ImGui::Button("💾 Save Settings", ImVec2(120, 0))) {
             saveSettings();
         }
         ImGui::SameLine();
+        
+        if (ImGui::Button("📤 Export", ImVec2(120, 0))) {
+            // Simple export to current directory for now
+            std::string exportPath = getExecutablePath() + "/exported_settings.json";
+            if (exportSettings(exportPath)) {
+                std::cout << "Settings exported to: " << exportPath << std::endl;
+            } else {
+                std::cerr << "Failed to export settings" << std::endl;
+            }
+        }
+        ImGui::SameLine();
+        
+        if (ImGui::Button("📥 Import", ImVec2(120, 0))) {
+            // Simple import from current directory for now
+            std::string importPath = getExecutablePath() + "/exported_settings.json";
+            if (importSettings(importPath)) {
+                std::cout << "Settings imported from: " << importPath << std::endl;
+                // Apply imported settings immediately
+                fuzzy_search_enabled = userSettings.search.fuzzySearchEnabled;
+                bible.enableFuzzySearch(fuzzy_search_enabled);
+                auto_search = userSettings.search.autoSearch;
+                show_performance_stats = userSettings.search.showPerformanceStats;
+                setupImGuiStyle(); // Apply theme changes
+            } else {
+                std::cerr << "Failed to import settings or file not found" << std::endl;
+            }
+        }
+        
+        ImGui::Spacing();
+        
+        if (ImGui::Button("🔄 Reset to Defaults", ImVec2(150, 0))) {
+            resetSettingsToDefault();
+            // Apply reset settings immediately
+            fuzzy_search_enabled = userSettings.search.fuzzySearchEnabled;
+            bible.enableFuzzySearch(fuzzy_search_enabled);
+            auto_search = userSettings.search.autoSearch;
+            show_performance_stats = userSettings.search.showPerformanceStats;
+            setupImGuiStyle(); // Apply theme changes
+        }
+        ImGui::SameLine();
+        
         if (ImGui::Button("❌ Close", ImVec2(120, 0))) {
             show_settings_window = false;
         }
@@ -1238,6 +1834,16 @@ void VerseFinderApp::performSearch() {
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
     last_search_time_ms = duration.count() / 1000.0;
     
+    // Apply search result limit
+    if (search_results.size() > static_cast<size_t>(userSettings.search.maxSearchResults)) {
+        search_results.resize(userSettings.search.maxSearchResults);
+    }
+    
+    // Add to search history if enabled and results found
+    if (!search_results.empty() && userSettings.content.saveSearchHistory) {
+        userSettings.addToSearchHistory(query);
+    }
+    
     selected_result_index = search_results.empty() ? -1 : 0;
     if (selected_result_index >= 0) {
         selected_verse_text = search_results[selected_result_index];
@@ -1446,6 +2052,10 @@ void VerseFinderApp::switchToTranslation(const std::string& translation_name) {
     for (const auto& trans : translations) {
         if (trans.abbreviation == translation_name || trans.name == translation_name) {
             current_translation = trans;
+            
+            // Add to recent translations
+            userSettings.addToRecentTranslations(trans.abbreviation);
+            
             // Re-perform search with new translation
             if (strlen(search_input) > 0) {
                 performSearch();
@@ -1464,15 +2074,136 @@ bool VerseFinderApp::isTranslationAvailable(const std::string& name) const {
 }
 
 bool VerseFinderApp::saveSettings() const {
-    // Implementation would save settings to a file
-    std::cout << "Settings saved" << std::endl;
-    return true;
+    try {
+        std::string settingsPath = getSettingsFilePath();
+        
+        // Update window state in settings if remembering position
+        if (userSettings.display.rememberWindowState && window) {
+            int width, height, xpos, ypos;
+            glfwGetWindowSize(window, &width, &height);
+            glfwGetWindowPos(window, &xpos, &ypos);
+            
+            // Create a mutable copy to update window state
+            UserSettings mutableSettings = userSettings;
+            mutableSettings.display.windowWidth = width;
+            mutableSettings.display.windowHeight = height;
+            mutableSettings.display.windowPosX = xpos;
+            mutableSettings.display.windowPosY = ypos;
+            
+            json settingsJson = mutableSettings.toJson();
+            std::ofstream file(settingsPath);
+            if (!file.is_open()) {
+                std::cerr << "Failed to open settings file for writing: " << settingsPath << std::endl;
+                return false;
+            }
+            
+            file << settingsJson.dump(4);
+            file.close();
+        } else {
+            json settingsJson = userSettings.toJson();
+            std::ofstream file(settingsPath);
+            if (!file.is_open()) {
+                std::cerr << "Failed to open settings file for writing: " << settingsPath << std::endl;
+                return false;
+            }
+            
+            file << settingsJson.dump(4);
+            file.close();
+        }
+        
+        std::cout << "Settings saved to: " << settingsPath << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to save settings: " << e.what() << std::endl;
+        return false;
+    }
 }
 
 bool VerseFinderApp::loadSettings() {
-    // Implementation would load settings from a file
-    std::cout << "Settings loaded" << std::endl;
-    return true;
+    try {
+        std::string settingsPath = getSettingsFilePath();
+        
+        if (!std::filesystem::exists(settingsPath)) {
+            std::cout << "Settings file not found, using defaults: " << settingsPath << std::endl;
+            userSettings.applyDefaults();
+            return saveSettings(); // Save default settings
+        }
+        
+        std::ifstream file(settingsPath);
+        if (!file.is_open()) {
+            std::cerr << "Failed to open settings file: " << settingsPath << std::endl;
+            userSettings.applyDefaults();
+            return false;
+        }
+        
+        json settingsJson;
+        file >> settingsJson;
+        file.close();
+        
+        userSettings.fromJson(settingsJson);
+        
+        if (!userSettings.validate()) {
+            std::cerr << "Invalid settings detected, applying defaults" << std::endl;
+            userSettings.applyDefaults();
+            return saveSettings();
+        }
+        
+        std::cout << "Settings loaded from: " << settingsPath << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to load settings: " << e.what() << std::endl;
+        userSettings.applyDefaults();
+        return saveSettings(); // Save default settings
+    }
+}
+
+void VerseFinderApp::resetSettingsToDefault() {
+    userSettings.applyDefaults();
+    saveSettings();
+}
+
+bool VerseFinderApp::exportSettings(const std::string& filepath) const {
+    try {
+        json settingsJson = userSettings.toJson();
+        std::ofstream file(filepath);
+        if (!file.is_open()) {
+            return false;
+        }
+        file << settingsJson.dump(4);
+        file.close();
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool VerseFinderApp::importSettings(const std::string& filepath) {
+    try {
+        if (!std::filesystem::exists(filepath)) {
+            return false;
+        }
+        
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            return false;
+        }
+        
+        json settingsJson;
+        file >> settingsJson;
+        file.close();
+        
+        UserSettings tempSettings;
+        tempSettings.fromJson(settingsJson);
+        
+        if (!tempSettings.validate()) {
+            return false;
+        }
+        
+        userSettings = tempSettings;
+        return saveSettings();
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 std::string VerseFinderApp::getTranslationFilename(const std::string& translation_name) const {

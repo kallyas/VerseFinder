@@ -664,6 +664,21 @@ void VerseFinderApp::renderSearchArea() {
                                                   search_input, sizeof(search_input), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::PopItemWidth();
     
+    // Search history dropdown (if history exists)
+    if (!userSettings.content.searchHistory.empty()) {
+        ImGui::Spacing();
+        if (ImGui::BeginCombo("🕒 Recent Searches", nullptr)) {
+            for (const auto& historical_search : userSettings.content.searchHistory) {
+                if (ImGui::Selectable(historical_search.c_str())) {
+                    strncpy(search_input, historical_search.c_str(), sizeof(search_input) - 1);
+                    search_input[sizeof(search_input) - 1] = '\0';
+                    performSearch();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
+    
     // Auto-search or manual search
     if (search_changed || (auto_search && strcmp(search_input, last_search_query.c_str()) != 0)) {
         last_search_query = search_input;
@@ -836,6 +851,12 @@ void VerseFinderApp::renderSearchResults() {
             ImGui::Text("%s", verse_text.c_str());
         } else {
             // Regular search result display
+            // Show favorite star if this verse is favorited
+            bool isFavorite = userSettings.isFavoriteVerse(result);
+            if (isFavorite) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "⭐");
+                ImGui::SameLine();
+            }
             ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
             
             // Verse text with word wrapping
@@ -881,8 +902,15 @@ void VerseFinderApp::renderSearchResults() {
         
         // Right-click context menu
         if (ImGui::BeginPopupContextItem(("context_" + std::to_string(i)).c_str())) {
-            if (ImGui::MenuItem("⭐ Add to Favorites")) {
-                userSettings.addFavoriteVerse(result);
+            bool isFavorite = userSettings.isFavoriteVerse(result);
+            if (isFavorite) {
+                if (ImGui::MenuItem("💔 Remove from Favorites")) {
+                    userSettings.removeFavoriteVerse(result);
+                }
+            } else {
+                if (ImGui::MenuItem("⭐ Add to Favorites")) {
+                    userSettings.addFavoriteVerse(result);
+                }
             }
             if (ImGui::MenuItem("📋 Copy to Clipboard")) {
                 copyToClipboard(result);
@@ -1442,6 +1470,27 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Text("Recently used: %zu", userSettings.content.recentTranslations.size());
                 for (const auto& trans : userSettings.content.recentTranslations) {
                     ImGui::BulletText("%s", trans.c_str());
+                }
+                
+                ImGui::Spacing();
+                ImGui::Separator();
+                
+                // Quick Stats and Actions
+                ImGui::Text("📊 Quick Stats");
+                ImGui::Spacing();
+                
+                ImGui::Text("Total favorites: %zu", userSettings.content.favoriteVerses.size());
+                ImGui::Text("Search history entries: %zu", userSettings.content.searchHistory.size());
+                ImGui::Text("Recent translations: %zu", userSettings.content.recentTranslations.size());
+                
+                ImGui::Spacing();
+                
+                if (ImGui::Button("🗑️ Clear All History")) {
+                    userSettings.content.searchHistory.clear();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("⭐ Clear Favorites")) {
+                    userSettings.content.favoriteVerses.clear();
                 }
                 
                 ImGui::EndTabItem();

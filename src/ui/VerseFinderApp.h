@@ -21,6 +21,8 @@
 #include "../core/VerseFinder.h"
 #include "../core/FuzzySearch.h"
 #include "../core/UserSettings.h"
+#include "../core/MemoryMonitor.h"
+#include "../core/IncrementalSearch.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -32,6 +34,7 @@
 #include <chrono>
 
 enum class UIScreen {
+    SPLASH,
     MAIN,
     SETTINGS
 };
@@ -87,12 +90,24 @@ private:
     // Performance monitoring
     double last_search_time_ms = 0.0;
     bool show_performance_stats = false;
+    bool show_memory_monitor = false;
+    std::unique_ptr<IncrementalSearch> incremental_search;
+    std::vector<std::string> auto_complete_suggestions;
+    bool show_auto_complete = false;
+    
+    // Splash screen state
+    UIScreen current_screen = UIScreen::SPLASH;
+    std::chrono::steady_clock::time_point app_start_time;
+    float splash_progress = 0.0f;
+    std::string splash_status = "Initializing...";
     
     // UI state
     bool show_verse_modal = false;
     bool show_settings_window = false;
     bool show_about_window = false;
     bool show_help_window = false;
+    bool show_performance_window = false;
+    bool show_memory_window = false;
     
     // UI styling
     void setupImGuiStyle();
@@ -123,10 +138,12 @@ private:
     
     // UI rendering methods
     void renderMainWindow();
+    void renderSplashScreen();
     void renderSearchArea();
     void renderSearchResults();
     void renderTranslationSelector();
     void renderStatusBar();
+    void renderAutoComplete();
     
     // Modal and window rendering
     void renderVerseModal();
@@ -134,6 +151,7 @@ private:
     void renderAboutWindow();
     void renderHelpWindow();
     void renderPerformanceWindow();
+    void renderMemoryWindow();
     
     // Presentation mode methods
     void initPresentationWindow();
@@ -150,6 +168,8 @@ private:
     
     // Utility methods
     void performSearch();
+    void performIncrementalSearch();
+    void updateAutoComplete();
     void clearSearch();
     void selectResult(int index);
     void copyToClipboard(const std::string& text);

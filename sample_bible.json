@@ -1,0 +1,56 @@
+{
+    "translation": "Sample",
+    "abbreviation": "SAMPLE",
+    "books": [
+        {
+            "name": "John",
+            "chapters": [
+                {
+                    "chapter": 3,
+                    "verses": [
+                        {
+                            "verse": 16,
+                            "text": "For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life."
+                        },
+                        {
+                            "verse": 17,
+                            "text": "For God did not send his Son into the world to condemn the world, but to save the world through him."
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Genesis",
+            "chapters": [
+                {
+                    "chapter": 1,
+                    "verses": [
+                        {
+                            "verse": 1,
+                            "text": "In the beginning God created the heavens and the earth."
+                        },
+                        {
+                            "verse": 2,
+                            "text": "Now the earth was formless and empty, darkness was over the surface of the deep, and the Spirit of God was hovering over the waters."
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Romans",
+            "chapters": [
+                {
+                    "chapter": 8,
+                    "verses": [
+                        {
+                            "verse": 28,
+                            "text": "And we know that in all things God works for the good of those who love him, who have been called according to his purpose."
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

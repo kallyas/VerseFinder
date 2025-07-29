@@ -69,11 +69,15 @@ std::string FuzzySearch::soundex(const std::string& word) const {
     for (size_t i = 1; i < normalized.length() && result.length() < 4; ++i) {
         char c = std::tolower(normalized[i]);
         if (c >= 'a' && c <= 'z') {
-            std::string code = mapping.substr(c - 'a', 1);
-            if (code != "0" && code != prev) {
-                result += code;
+            size_t index = static_cast<size_t>(c - 'a');
+            // Ensure index is within bounds of mapping string
+            if (index < mapping.length()) {
+                std::string code = mapping.substr(index, 1);
+                if (code != "0" && code != prev) {
+                    result += code;
+                }
+                prev = code;
             }
-            prev = code;
         }
     }
     
@@ -90,14 +94,19 @@ std::string FuzzySearch::soundex(const std::string& word) const {
 double FuzzySearch::ngramSimilarity(const std::string& s1, const std::string& s2, int n) const {
     if (s1.empty() || s2.empty()) return 0.0;
     
+    // Check if strings are too short for n-grams
+    if (static_cast<int>(s1.length()) < n || static_cast<int>(s2.length()) < n) {
+        return 0.0;
+    }
+    
     std::unordered_set<std::string> ngrams1, ngrams2;
     
-    // Generate n-grams for both strings
-    for (size_t i = 0; i <= s1.length() - n; ++i) {
+    // Generate n-grams for both strings - safe bounds checking
+    for (size_t i = 0; i <= s1.length() - static_cast<size_t>(n); ++i) {
         ngrams1.insert(s1.substr(i, n));
     }
     
-    for (size_t i = 0; i <= s2.length() - n; ++i) {
+    for (size_t i = 0; i <= s2.length() - static_cast<size_t>(n); ++i) {
         ngrams2.insert(s2.substr(i, n));
     }
     

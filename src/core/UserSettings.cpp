@@ -105,27 +105,30 @@ void to_json(json& j, const PresentationSettings& settings) {
 }
 
 void from_json(const json& j, PresentationSettings& settings) {
-    j.at("enabled").get_to(settings.enabled);
-    j.at("fontSize").get_to(settings.fontSize);
-    j.at("fontFamily").get_to(settings.fontFamily);
-    j.at("backgroundColor").get_to(settings.backgroundColor);
-    j.at("textColor").get_to(settings.textColor);
-    j.at("referenceColor").get_to(settings.referenceColor);
-    j.at("showReference").get_to(settings.showReference);
-    j.at("showBackground").get_to(settings.showBackground);
-    j.at("backgroundImagePath").get_to(settings.backgroundImagePath);
-    j.at("windowWidth").get_to(settings.windowWidth);
-    j.at("windowHeight").get_to(settings.windowHeight);
-    j.at("windowPosX").get_to(settings.windowPosX);
-    j.at("windowPosY").get_to(settings.windowPosY);
-    j.at("monitorIndex").get_to(settings.monitorIndex);
-    j.at("fullscreen").get_to(settings.fullscreen);
-    j.at("obsOptimized").get_to(settings.obsOptimized);
-    j.at("windowTitle").get_to(settings.windowTitle);
-    j.at("autoHideCursor").get_to(settings.autoHideCursor);
-    j.at("fadeTransitionTime").get_to(settings.fadeTransitionTime);
-    j.at("textAlignment").get_to(settings.textAlignment);
-    j.at("textPadding").get_to(settings.textPadding);
+    // Use default values and only update if key exists
+    settings = PresentationSettings{}; // Start with defaults
+    
+    if (j.contains("enabled")) j.at("enabled").get_to(settings.enabled);
+    if (j.contains("fontSize")) j.at("fontSize").get_to(settings.fontSize);
+    if (j.contains("fontFamily")) j.at("fontFamily").get_to(settings.fontFamily);
+    if (j.contains("backgroundColor")) j.at("backgroundColor").get_to(settings.backgroundColor);
+    if (j.contains("textColor")) j.at("textColor").get_to(settings.textColor);
+    if (j.contains("referenceColor")) j.at("referenceColor").get_to(settings.referenceColor);
+    if (j.contains("showReference")) j.at("showReference").get_to(settings.showReference);
+    if (j.contains("showBackground")) j.at("showBackground").get_to(settings.showBackground);
+    if (j.contains("backgroundImagePath")) j.at("backgroundImagePath").get_to(settings.backgroundImagePath);
+    if (j.contains("windowWidth")) j.at("windowWidth").get_to(settings.windowWidth);
+    if (j.contains("windowHeight")) j.at("windowHeight").get_to(settings.windowHeight);
+    if (j.contains("windowPosX")) j.at("windowPosX").get_to(settings.windowPosX);
+    if (j.contains("windowPosY")) j.at("windowPosY").get_to(settings.windowPosY);
+    if (j.contains("monitorIndex")) j.at("monitorIndex").get_to(settings.monitorIndex);
+    if (j.contains("fullscreen")) j.at("fullscreen").get_to(settings.fullscreen);
+    if (j.contains("obsOptimized")) j.at("obsOptimized").get_to(settings.obsOptimized);
+    if (j.contains("windowTitle")) j.at("windowTitle").get_to(settings.windowTitle);
+    if (j.contains("autoHideCursor")) j.at("autoHideCursor").get_to(settings.autoHideCursor);
+    if (j.contains("fadeTransitionTime")) j.at("fadeTransitionTime").get_to(settings.fadeTransitionTime);
+    if (j.contains("textAlignment")) j.at("textAlignment").get_to(settings.textAlignment);
+    if (j.contains("textPadding")) j.at("textPadding").get_to(settings.textPadding);
 }
 
 // UserSettings JSON serialization

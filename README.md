@@ -25,6 +25,14 @@ VerseFinder is a high-performance, cross-platform C++ GUI application designed f
 - **Responsive Design**: Adapts to different screen sizes and resolutions
 - **Keyboard Shortcuts**: Efficient navigation with keyboard support
 
+### 📺 Presentation Mode *(NEW)*
+- **Dual Window System**: Separate control interface and presentation display
+- **OBS Studio Integration**: Optimized for live streaming and recording
+- **Multi-Monitor Support**: Dedicated display for projectors and screens
+- **Customizable Appearance**: Fonts, colors, and layouts for optimal visibility
+- **Church Service Ready**: Quick verse display with blank screen toggle
+- **Hotkey Control**: F5, F6, F7 shortcuts for seamless operation
+
 ### ⚡ Performance
 - **In-Memory Storage**: All Bible data loaded into memory for instant access
 - **Optimized Indexing**: Advanced keyword indexing for fast search operations
@@ -167,6 +175,34 @@ VerseFinder/
 - **Copy to Clipboard**: Click "Copy" button in verse modal
 - **Search History**: Recent searches remembered during session
 - **Multi-word Search**: Search for phrases like "God so loved"
+
+### 📺 Presentation Mode
+Perfect for church services and live streaming:
+
+1. **Enable Presentation**: 
+   - Go to Settings → Presentation tab
+   - Check "Enable Presentation Mode"
+   - Configure monitor, fonts, and colors
+
+2. **Start Presenting**:
+   - Press **F5** to start presentation mode
+   - A second window opens on your target monitor
+
+3. **Display Verses**:
+   - Right-click any verse → "Display on Presentation"
+   - Or select a verse and press **F7**
+
+4. **Presentation Controls**:
+   - **F5**: Toggle presentation mode
+   - **F6**: Toggle blank screen
+   - **F7**: Display selected verse
+
+5. **OBS Studio Setup**:
+   - Add "Window Capture" source
+   - Select "VerseFinder - Presentation"
+   - Perfect for live streaming!
+
+📖 **See [PRESENTATION_MODE.md](PRESENTATION_MODE.md) for detailed documentation**
 
 ## 🔧 Configuration
 

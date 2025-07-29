@@ -188,6 +188,7 @@ add_executable(VerseFinder
     src/core/SearchOptimizer.cpp
     src/core/PerformanceBenchmark.cpp
     src/core/FuzzySearch.cpp
+    src/core/UserSettings.cpp
     src/ui/VerseFinderApp.cpp
     ${IMGUI_SOURCES}
 )

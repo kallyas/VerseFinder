@@ -50,6 +50,14 @@ class VerseFinderApp {
 private:
     // Core GLFW and OpenGL components
     GLFWwindow* window;
+    GLFWwindow* presentation_window;
+    
+    // Presentation state
+    bool presentation_mode_active = false;
+    std::string current_displayed_verse;
+    std::string current_displayed_reference;
+    float presentation_fade_alpha = 1.0f;
+    bool presentation_blank_screen = false;
     
     // User settings
     UserSettings userSettings;
@@ -126,6 +134,19 @@ private:
     void renderAboutWindow();
     void renderHelpWindow();
     void renderPerformanceWindow();
+    
+    // Presentation mode methods
+    void initPresentationWindow();
+    void destroyPresentationWindow();
+    void renderPresentationWindow();
+    void renderPresentationPreview();
+    void togglePresentationMode();
+    void displayVerseOnPresentation(const std::string& verse_text, const std::string& reference);
+    void clearPresentationDisplay();
+    void toggleBlankScreen();
+    bool isPresentationWindowActive() const;
+    void updatePresentationMonitorPosition();
+    std::vector<GLFWmonitor*> getAvailableMonitors() const;
     
     // Utility methods
     void performSearch();

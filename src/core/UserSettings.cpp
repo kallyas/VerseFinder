@@ -77,13 +77,68 @@ void from_json(const json& j, ContentSettings& settings) {
     j.at("saveSearchHistory").get_to(settings.saveSearchHistory);
 }
 
+// PresentationSettings JSON serialization
+void to_json(json& j, const PresentationSettings& settings) {
+    j = json{
+        {"enabled", settings.enabled},
+        {"fontSize", settings.fontSize},
+        {"fontFamily", settings.fontFamily},
+        {"backgroundColor", settings.backgroundColor},
+        {"textColor", settings.textColor},
+        {"referenceColor", settings.referenceColor},
+        {"showReference", settings.showReference},
+        {"showBackground", settings.showBackground},
+        {"backgroundImagePath", settings.backgroundImagePath},
+        {"windowWidth", settings.windowWidth},
+        {"windowHeight", settings.windowHeight},
+        {"windowPosX", settings.windowPosX},
+        {"windowPosY", settings.windowPosY},
+        {"monitorIndex", settings.monitorIndex},
+        {"fullscreen", settings.fullscreen},
+        {"obsOptimized", settings.obsOptimized},
+        {"windowTitle", settings.windowTitle},
+        {"autoHideCursor", settings.autoHideCursor},
+        {"fadeTransitionTime", settings.fadeTransitionTime},
+        {"textAlignment", settings.textAlignment},
+        {"textPadding", settings.textPadding}
+    };
+}
+
+void from_json(const json& j, PresentationSettings& settings) {
+    // Use default values and only update if key exists
+    settings = PresentationSettings{}; // Start with defaults
+    
+    if (j.contains("enabled")) j.at("enabled").get_to(settings.enabled);
+    if (j.contains("fontSize")) j.at("fontSize").get_to(settings.fontSize);
+    if (j.contains("fontFamily")) j.at("fontFamily").get_to(settings.fontFamily);
+    if (j.contains("backgroundColor")) j.at("backgroundColor").get_to(settings.backgroundColor);
+    if (j.contains("textColor")) j.at("textColor").get_to(settings.textColor);
+    if (j.contains("referenceColor")) j.at("referenceColor").get_to(settings.referenceColor);
+    if (j.contains("showReference")) j.at("showReference").get_to(settings.showReference);
+    if (j.contains("showBackground")) j.at("showBackground").get_to(settings.showBackground);
+    if (j.contains("backgroundImagePath")) j.at("backgroundImagePath").get_to(settings.backgroundImagePath);
+    if (j.contains("windowWidth")) j.at("windowWidth").get_to(settings.windowWidth);
+    if (j.contains("windowHeight")) j.at("windowHeight").get_to(settings.windowHeight);
+    if (j.contains("windowPosX")) j.at("windowPosX").get_to(settings.windowPosX);
+    if (j.contains("windowPosY")) j.at("windowPosY").get_to(settings.windowPosY);
+    if (j.contains("monitorIndex")) j.at("monitorIndex").get_to(settings.monitorIndex);
+    if (j.contains("fullscreen")) j.at("fullscreen").get_to(settings.fullscreen);
+    if (j.contains("obsOptimized")) j.at("obsOptimized").get_to(settings.obsOptimized);
+    if (j.contains("windowTitle")) j.at("windowTitle").get_to(settings.windowTitle);
+    if (j.contains("autoHideCursor")) j.at("autoHideCursor").get_to(settings.autoHideCursor);
+    if (j.contains("fadeTransitionTime")) j.at("fadeTransitionTime").get_to(settings.fadeTransitionTime);
+    if (j.contains("textAlignment")) j.at("textAlignment").get_to(settings.textAlignment);
+    if (j.contains("textPadding")) j.at("textPadding").get_to(settings.textPadding);
+}
+
 // UserSettings JSON serialization
 void to_json(json& j, const UserSettings& settings) {
     j = json{
         {"version", settings.version},
         {"display", settings.display},
         {"search", settings.search},
-        {"content", settings.content}
+        {"content", settings.content},
+        {"presentation", settings.presentation}
     };
 }
 
@@ -92,6 +147,14 @@ void from_json(const json& j, UserSettings& settings) {
     j.at("display").get_to(settings.display);
     j.at("search").get_to(settings.search);
     j.at("content").get_to(settings.content);
+    
+    // Handle presentation settings with backwards compatibility
+    if (j.contains("presentation")) {
+        j.at("presentation").get_to(settings.presentation);
+    } else {
+        // Use default values if not present in old settings
+        settings.presentation = PresentationSettings{};
+    }
 }
 
 // UserSettings implementation
@@ -131,6 +194,7 @@ void UserSettings::applyDefaults() {
     display = DisplaySettings{};
     search = SearchSettings{};
     content = ContentSettings{};
+    presentation = PresentationSettings{};
     version = "1.0";
 }
 

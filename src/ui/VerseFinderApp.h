@@ -1,13 +1,7 @@
 #ifndef VERSEFINDERAPP_H
 #define VERSEFINDERAPP_H
 
-#include "../core/VerseFinder.h"
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include <GLFW/glfw3.h>
-
-// OpenGL loader
+// OpenGL loader - must be included before GLFW
 #ifdef IMGUI_IMPL_OPENGL_LOADER_GLEW
 #include <GL/glew.h>
 #elif defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
@@ -23,6 +17,13 @@
 #include <GL/gl.h>
 #endif
 #endif
+
+#include "../core/VerseFinder.h"
+#include "../core/FuzzySearch.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include <GLFW/glfw3.h>
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -60,6 +61,11 @@ private:
     std::string selected_verse_text;
     std::string last_search_query;
     bool auto_search = true;
+    
+    // Fuzzy search state
+    bool fuzzy_search_enabled = false;
+    std::vector<std::string> query_suggestions;
+    std::vector<FuzzyMatch> book_suggestions;
     
     // Chapter viewing state
     bool is_viewing_chapter = false;

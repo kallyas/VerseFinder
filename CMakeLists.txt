@@ -200,6 +200,9 @@ add_executable(VerseFinder
 # Compiler definitions for OpenGL loader
 target_compile_definitions(VerseFinder PRIVATE 
     ${OPENGL_LOADER_DEFINITIONS}
+    MATERIAL_ICONS_FONT_PATH="${MATERIAL_ICONS_FONT_PATH}"
+    GENTIUM_FONT_PATH="${GENTIUM_FONT_PATH}"
+    FONT_BASE_PATH="${FONT_BASE_PATH}"
 )
 
 # On macOS with custom loader, force include our OpenGL header
@@ -275,6 +278,11 @@ endif()
 file(COPY data/ DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY assets/ DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY fonts/ DESTINATION ${CMAKE_BINARY_DIR}/fonts)
+
+# Define font paths for compile-time configuration
+set(FONT_BASE_PATH "${CMAKE_BINARY_DIR}/fonts")
+set(MATERIAL_ICONS_FONT_PATH "${FONT_BASE_PATH}/MaterialIcons-Regular.ttf")
+set(GENTIUM_FONT_PATH "${FONT_BASE_PATH}/Gentium_Plus/GentiumPlus-Regular.ttf")
 
 # Create translations directory structure
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/translations)

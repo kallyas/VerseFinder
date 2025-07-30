@@ -190,7 +190,14 @@ bool VerseFinderApp::init() {
     
     // Load fonts with symbol support using system font size
     float systemFontSize = getSystemFontSize();
-    io.Fonts->AddFontFromFileTTF((getExecutablePath() + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf").c_str(), systemFontSize);
+    
+    // Use compile-time defined font paths from CMake
+    #ifdef GENTIUM_FONT_PATH
+        io.Fonts->AddFontFromFileTTF(GENTIUM_FONT_PATH, systemFontSize);
+    #else
+        // Fallback to runtime path resolution
+        io.Fonts->AddFontFromFileTTF((getExecutablePath() + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf").c_str(), systemFontSize);
+    #endif
     
     // Load Material Design Icons font
     ImFontConfig icon_config;
@@ -199,12 +206,19 @@ bool VerseFinderApp::init() {
     icon_config.GlyphMinAdvanceX = systemFontSize;
     static const ImWchar icon_ranges[] = { 0xE000, 0xF8FF, 0 };
     
-    std::string icon_font_path = getExecutablePath() + "/fonts/MaterialIcons-Regular.ttf";
-    icon_font = io.Fonts->AddFontFromFileTTF(icon_font_path.c_str(), systemFontSize, &icon_config, icon_ranges);
-    
-    if (!icon_font) {
-        std::cout << "Warning: Failed to load Material Icons font from: " << icon_font_path << std::endl;
-    }
+    #ifdef MATERIAL_ICONS_FONT_PATH
+        icon_font = io.Fonts->AddFontFromFileTTF(MATERIAL_ICONS_FONT_PATH, systemFontSize, &icon_config, icon_ranges);
+        if (!icon_font) {
+            std::cout << "Warning: Failed to load Material Icons font from: " << MATERIAL_ICONS_FONT_PATH << std::endl;
+        }
+    #else
+        // Fallback to runtime path resolution
+        std::string icon_font_path = getExecutablePath() + "/fonts/MaterialIcons-Regular.ttf";
+        icon_font = io.Fonts->AddFontFromFileTTF(icon_font_path.c_str(), systemFontSize, &icon_config, icon_ranges);
+        if (!icon_font) {
+            std::cout << "Warning: Failed to load Material Icons font from: " << icon_font_path << std::endl;
+        }
+    #endif
     
     // Add Unicode ranges for symbol/emoji support (limited to 16-bit ranges)
     static const ImWchar ranges[] = {

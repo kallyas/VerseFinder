@@ -660,7 +660,7 @@ void VerseFinderApp::renderMainWindow() {
 }
 
 void VerseFinderApp::renderSearchArea() {
-    ImGui::Text("🔍 Bible Search");
+    ImGui::Text("Bible Search");
     ImGui::Spacing();
     
     // Search input
@@ -692,7 +692,7 @@ void VerseFinderApp::renderSearchArea() {
     
     // Search buttons and controls
     ImGui::Spacing();
-    if (ImGui::Button("🔍 Search", ImVec2(80, 0))) {
+    if (ImGui::Button("Search", ImVec2(80, 0))) {
         performSearch();
     }
     ImGui::SameLine();
@@ -784,13 +784,13 @@ void VerseFinderApp::renderSearchArea() {
 
 void VerseFinderApp::renderSearchResults() {
     if (!bible.isReady()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "⏳ Loading Bible data...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading Bible data...");
         return;
     }
     
     if (search_results.empty()) {
         if (strlen(search_input) > 0) {
-            ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "❌ No verses found");
+            ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No verses found");
             ImGui::Text("Try different keywords or check the reference");
         } else {
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "📖 Enter search terms above");
@@ -804,7 +804,7 @@ void VerseFinderApp::renderSearchResults() {
                    current_chapter_book.c_str(), current_chapter_number, (int)search_results.size());
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Click any verse to jump to it");
     } else {
-        ImGui::Text("📋 Results (%d found)", (int)search_results.size());
+        ImGui::Text("Results (%d found)", (int)search_results.size());
     }
     ImGui::Separator();
     
@@ -859,7 +859,7 @@ void VerseFinderApp::renderSearchResults() {
             // Show favorite star if this verse is favorited
             bool isFavorite = userSettings.isFavoriteVerse(result);
             if (isFavorite) {
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "⭐");
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "*");
                 ImGui::SameLine();
             }
             ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
@@ -913,18 +913,18 @@ void VerseFinderApp::renderSearchResults() {
                     userSettings.removeFavoriteVerse(result);
                 }
             } else {
-                if (ImGui::MenuItem("⭐ Add to Favorites")) {
+                if (ImGui::MenuItem("Add to Favorites")) {
                     userSettings.addFavoriteVerse(result);
                 }
             }
-            if (ImGui::MenuItem("📋 Copy to Clipboard")) {
+            if (ImGui::MenuItem("Copy to Clipboard")) {
                 copyToClipboard(result);
             }
-            if (ImGui::MenuItem("🔍 View Full Verse")) {
+            if (ImGui::MenuItem("View Full Verse")) {
                 selectResult(static_cast<int>(i));
                 show_verse_modal = true;
             }
-            if (userSettings.presentation.enabled && ImGui::MenuItem("📺 Display on Presentation")) {
+            if (userSettings.presentation.enabled && ImGui::MenuItem("Display on Presentation")) {
                 selectResult(static_cast<int>(i));
                 std::string verse_text = formatVerseText(selected_verse_text);
                 std::string reference = formatVerseReference(selected_verse_text);
@@ -989,16 +989,16 @@ void VerseFinderApp::renderTranslationSelector() {
 void VerseFinderApp::renderStatusBar() {
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text("📊 Status");
+    ImGui::Text("Status");
     
     if (bible.isReady()) {
         const auto& translations = bible.getTranslations();
-        ImGui::Text("✅ Ready - %d translation(s) loaded", (int)translations.size());
+        ImGui::Text("Ready - %d translation(s) loaded", (int)translations.size());
         
         if (!search_results.empty()) {
-            ImGui::Text("🔍 Found %d verse(s)", (int)search_results.size());
+            ImGui::Text("Found %d verse(s)", (int)search_results.size());
             if (selected_result_index >= 0) {
-                ImGui::Text("👆 Selected: %d", selected_result_index + 1);
+                ImGui::Text("Selected: %d", selected_result_index + 1);
             }
         }
         
@@ -1007,7 +1007,7 @@ void VerseFinderApp::renderStatusBar() {
             ImGui::Text("⚡ Search: %.2f ms", last_search_time_ms);
         }
     } else {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "⏳ Loading Bible data...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading Bible data...");
     }
     
     // Selected verse preview
@@ -1082,11 +1082,11 @@ void VerseFinderApp::renderVerseModal() {
             ImGui::SameLine();
             
             // Action buttons
-            if (ImGui::Button("📋 Copy", ImVec2(100, 35))) {
+            if (ImGui::Button("Copy", ImVec2(100, 35))) {
                 copyToClipboard(selected_verse_text);
             }
             ImGui::SameLine();
-            if (ImGui::Button("❌ Close", ImVec2(100, 35))) {
+            if (ImGui::Button("Close", ImVec2(100, 35))) {
                 show_verse_modal = false;
             }
         }
@@ -1104,7 +1104,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Download all button
-                if (ImGui::Button("⬇️ Download All Free Translations", ImVec2(-1, 30))) {
+                if (ImGui::Button("Download All Free Translations", ImVec2(-1, 30))) {
                     for (auto& trans : available_translations) {
                         if (!trans.is_downloaded && !trans.is_downloading) {
                             downloadTranslation(trans.url, trans.name);
@@ -1132,12 +1132,12 @@ void VerseFinderApp::renderSettingsWindow() {
                         // Status
                         ImGui::TableNextColumn();
                         if (trans.is_downloading) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "⏳ Downloading...");
+                            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Downloading...");
                             ImGui::ProgressBar(trans.download_progress);
                         } else if (trans.is_downloaded) {
-                            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "✅ Downloaded");
+                            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Downloaded");
                         } else {
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "⭕ Available");
+                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Available");
                         }
                         
                         // Description
@@ -1149,11 +1149,11 @@ void VerseFinderApp::renderSettingsWindow() {
                         std::string button_id = "##" + trans.abbreviation;
                         
                         if (trans.is_downloaded) {
-                            if (ImGui::Button(("✅ Select" + button_id).c_str(), ImVec2(80, 0))) {
+                            if (ImGui::Button(("Select" + button_id).c_str(), ImVec2(80, 0))) {
                                 switchToTranslation(trans.name);
                             }
                         } else if (!trans.is_downloading) {
-                            if (ImGui::Button(("⬇️ Download" + button_id).c_str(), ImVec2(80, 0))) {
+                            if (ImGui::Button(("Download" + button_id).c_str(), ImVec2(80, 0))) {
                                 downloadTranslation(trans.url, trans.name);
                             }
                         }
@@ -1245,7 +1245,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
-            if (ImGui::BeginTabItem("🔍 Search")) {
+            if (ImGui::BeginTabItem("Search")) {
                 ImGui::Text("Configure search behavior and preferences");
                 ImGui::Separator();
                 
@@ -1394,7 +1394,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Favorites section
-                ImGui::Text("⭐ Favorite Verses");
+                ImGui::Text("Favorite Verses");
                 ImGui::Spacing();
                 
                 ImGui::Text("Saved favorites: %zu", userSettings.content.favoriteVerses.size());
@@ -1487,7 +1487,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Quick Stats and Actions
-                ImGui::Text("📊 Quick Stats");
+                ImGui::Text("Quick Stats");
                 ImGui::Spacing();
                 
                 ImGui::Text("Total favorites: %zu", userSettings.content.favoriteVerses.size());
@@ -1496,18 +1496,18 @@ void VerseFinderApp::renderSettingsWindow() {
                 
                 ImGui::Spacing();
                 
-                if (ImGui::Button("🗑️ Clear All History")) {
+                if (ImGui::Button("Clear All History")) {
                     userSettings.content.searchHistory.clear();
                 }
                 ImGui::SameLine();
-                if (ImGui::Button("⭐ Clear Favorites")) {
+                if (ImGui::Button("Clear Favorites")) {
                     userSettings.content.favoriteVerses.clear();
                 }
                 
                 ImGui::EndTabItem();
             }
             
-            if (ImGui::BeginTabItem("📺 Presentation")) {
+            if (ImGui::BeginTabItem("Presentation")) {
                 ImGui::Text("Configure presentation mode for OBS and live display");
                 ImGui::Separator();
                 
@@ -1755,7 +1755,7 @@ void VerseFinderApp::renderSettingsWindow() {
         }
         ImGui::SameLine();
         
-        if (ImGui::Button("❌ Close", ImVec2(120, 0))) {
+        if (ImGui::Button("Close", ImVec2(120, 0))) {
             show_settings_window = false;
         }
     }
@@ -1785,7 +1785,7 @@ void VerseFinderApp::renderAboutWindow() {
         ImGui::Spacing();
         ImGui::Separator();
         
-        if (ImGui::Button("❌ Close", ImVec2(-1, 0))) {
+        if (ImGui::Button("Close", ImVec2(-1, 0))) {
             show_about_window = false;
         }
     }
@@ -1796,7 +1796,7 @@ void VerseFinderApp::renderHelpWindow() {
     ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
     
     if (ImGui::Begin("❓ Help", &show_help_window)) {
-        ImGui::Text("🔍 How to Search");
+        ImGui::Text("How to Search");
         ImGui::Separator();
         
         ImGui::Text("Reference Search:");
@@ -1827,7 +1827,7 @@ void VerseFinderApp::renderHelpWindow() {
         ImGui::BulletText("F1 - This help");
         
         ImGui::Separator();
-        if (ImGui::Button("❌ Close", ImVec2(-1, 0))) {
+        if (ImGui::Button("Close", ImVec2(-1, 0))) {
             show_help_window = false;
         }
     }
@@ -1838,7 +1838,7 @@ void VerseFinderApp::renderPerformanceWindow() {
     ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
     
     if (ImGui::Begin("⚡ Performance Statistics", &show_performance_stats)) {
-        ImGui::Text("🔍 Search Performance");
+        ImGui::Text("Search Performance");
         ImGui::Separator();
         
         // Current search timing
@@ -1861,7 +1861,7 @@ void VerseFinderApp::renderPerformanceWindow() {
         }
         
         ImGui::Spacing();
-        ImGui::Text("📊 Cache Statistics");
+        ImGui::Text("Cache Statistics");
         ImGui::Separator();
         
         // Get cache statistics from VerseFinder
@@ -1870,7 +1870,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             std::string cache_info = "Cache information available in console";
             ImGui::Text("%s", cache_info.c_str());
             
-            if (ImGui::Button("🖨️ Print Full Stats to Console")) {
+            if (ImGui::Button("Print Full Stats to Console")) {
                 bible.printPerformanceStats();
             }
             
@@ -1899,7 +1899,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             ImGui::Text("⚙️ Cache Management");
             ImGui::Separator();
             
-            if (ImGui::Button("🗑️ Clear Search Cache")) {
+            if (ImGui::Button("Clear Search Cache")) {
                 bible.clearSearchCache();
                 ImGui::OpenPopup("Cache Cleared");
             }
@@ -1914,13 +1914,13 @@ void VerseFinderApp::renderPerformanceWindow() {
             }
             
         } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "⏳ Bible data still loading...");
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Bible data still loading...");
         }
         
         ImGui::Spacing();
         ImGui::Separator();
         
-        if (ImGui::Button("❌ Close", ImVec2(-1, 0))) {
+        if (ImGui::Button("Close", ImVec2(-1, 0))) {
             show_performance_stats = false;
         }
     }
@@ -2084,9 +2084,12 @@ void VerseFinderApp::selectResult(int index) {
 }
 
 void VerseFinderApp::copyToClipboard(const std::string& text) {
-    // For now, just print to console - ImGui doesn't have built-in clipboard
-    // In a real implementation, you'd use platform-specific clipboard APIs
-    std::cout << "Copied to clipboard: " << text << std::endl;
+    if (window && !text.empty()) {
+        glfwSetClipboardString(window, text.c_str());
+        std::cout << "Successfully copied to clipboard: " << text.substr(0, 50) << (text.length() > 50 ? "..." : "") << std::endl;
+    } else {
+        std::cout << "Failed to copy to clipboard: " << (window ? "text is empty" : "no window available") << std::endl;
+    }
 }
 
 std::string VerseFinderApp::formatVerseReference(const std::string& verse_text) {
@@ -2779,7 +2782,7 @@ void VerseFinderApp::renderPresentationPreview() {
     }
     
     ImGui::Separator();
-    ImGui::Text("📺 Presentation Preview");
+    ImGui::Text("Presentation Preview");
     
     // Create a bordered child window for preview
     ImVec2 preview_size(400, 225); // 16:9 aspect ratio
@@ -2834,15 +2837,15 @@ void VerseFinderApp::renderPresentationPreview() {
     ImGui::Spacing();
     
     if (!presentation_mode_active) {
-        if (ImGui::Button("🚀 Start Presentation Mode")) {
+        if (ImGui::Button("Start Presentation Mode")) {
             togglePresentationMode();
         }
     } else {
-        if (ImGui::Button("⏹️ Stop Presentation Mode")) {
+        if (ImGui::Button("Stop Presentation Mode")) {
             togglePresentationMode();
         }
         ImGui::SameLine();
-        if (ImGui::Button(presentation_blank_screen ? "📺 Show Display" : "⬛ Blank Screen")) {
+        if (ImGui::Button(presentation_blank_screen ? "Show Display" : "Blank Screen")) {
             toggleBlankScreen();
         }
     }

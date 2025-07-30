@@ -1,0 +1,66 @@
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found OpenGL: /usr/lib/x86_64-linux-gnu/libOpenGL.so
+-- GLFW not found via pkg-config, downloading...
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Including X11 support
+-- Found X11: /usr/include
+-- Looking for XOpenDisplay in /usr/lib/x86_64-linux-gnu/libX11.so;/usr/lib/x86_64-linux-gnu/libXext.so
+-- Looking for XOpenDisplay in /usr/lib/x86_64-linux-gnu/libX11.so;/usr/lib/x86_64-linux-gnu/libXext.so - found
+-- Looking for gethostbyname
+-- Looking for gethostbyname - found
+-- Looking for connect
+-- Looking for connect - found
+-- Looking for remove
+-- Looking for remove - found
+-- Looking for shmat
+-- Looking for shmat - found
+-- GLFW downloaded and configured
+-- nlohmann/json not found, downloading...
+-- Using the multi-header code from /home/runner/work/VerseFinder/VerseFinder/_deps/nlohmann_json-src/include/
+-- nlohmann/json downloaded and configured
+-- Dear ImGui not found, downloading...
+-- Dear ImGui downloaded to /home/runner/work/VerseFinder/VerseFinder/third_party/imgui
+-- GLEW not found, downloading...
+CMake Deprecation Warning at _deps/glew-src/build/cmake/CMakeLists.txt:7 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- GLEW downloaded and configured
+-- Configuring done (24.5s)
+CMake Error at _deps/glew-src/build/cmake/CMakeLists.txt:107 (add_library):
+  Cannot find source file:
+
+    /home/runner/work/VerseFinder/VerseFinder/_deps/glew-src/include/GL/wglew.h
+
+  Tried extensions .c .C .c++ .cc .cpp .cxx .cu .mpp .m .M .mm .ixx .cppm
+  .ccm .cxxm .c++m .h .hh .h++ .hm .hpp .hxx .in .txx .f .F .for .f77 .f90
+  .f95 .f03 .hip .ispc
+
+
+CMake Error at _deps/glew-src/build/cmake/CMakeLists.txt:107 (add_library):
+  No SOURCES given to target: glew
+
+
+CMake Error at _deps/glew-src/build/cmake/CMakeLists.txt:111 (add_library):
+  No SOURCES given to target: glew_s
+
+
+CMake Generate step failed.  Build files cannot be regenerated correctly.

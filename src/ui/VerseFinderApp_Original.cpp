@@ -191,36 +191,34 @@ bool VerseFinderApp::init() {
     // Load fonts with symbol support using system font size
     float systemFontSize = getSystemFontSize();
     
-    // Try to load a custom font with fallback to default
-    std::vector<std::string> font_paths;
-    
-    // Use compile-time defined font path from CMake
+    // Use compile-time defined font paths from CMake
     #ifdef GENTIUM_FONT_PATH
-        font_paths.push_back(GENTIUM_FONT_PATH);
+        io.Fonts->AddFontFromFileTTF(GENTIUM_FONT_PATH, systemFontSize);
+    #else
+        // Fallback to runtime path resolution
+        io.Fonts->AddFontFromFileTTF((getExecutablePath() + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf").c_str(), systemFontSize);
     #endif
     
-    // Runtime path resolution
-    std::string exe_dir = getExecutablePath();
-    font_paths.push_back(exe_dir + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf");
-    font_paths.push_back(exe_dir + "/fonts/arial/ARIAL.TTF");
+    // Load Material Design Icons font
+    ImFontConfig icon_config;
+    icon_config.MergeMode = true;
+    icon_config.PixelSnapH = true;
+    icon_config.GlyphMinAdvanceX = systemFontSize;
+    static const ImWchar icon_ranges[] = { 0xE000, 0xF8FF, 0 };
     
-    // Try to load fonts in order of preference
-    ImFont* loaded_font = nullptr;
-    for (const auto& path : font_paths) {
-        if (std::filesystem::exists(path)) {
-            loaded_font = io.Fonts->AddFontFromFileTTF(path.c_str(), systemFontSize);
-            if (loaded_font) {
-                std::cout << "Loaded font: " << path << std::endl;
-                break;
-            }
+    #ifdef MATERIAL_ICONS_FONT_PATH
+        icon_font = io.Fonts->AddFontFromFileTTF(MATERIAL_ICONS_FONT_PATH, systemFontSize, &icon_config, icon_ranges);
+        if (!icon_font) {
+            std::cout << "Warning: Failed to load Material Icons font from: " << MATERIAL_ICONS_FONT_PATH << std::endl;
         }
-    }
-    
-    // If no custom font loaded, use default
-    if (!loaded_font) {
-        std::cout << "Using default ImGui font" << std::endl;
-        io.Fonts->AddFontDefault();
-    }
+    #else
+        // Fallback to runtime path resolution
+        std::string icon_font_path = getExecutablePath() + "/fonts/MaterialIcons-Regular.ttf";
+        icon_font = io.Fonts->AddFontFromFileTTF(icon_font_path.c_str(), systemFontSize, &icon_config, icon_ranges);
+        if (!icon_font) {
+            std::cout << "Warning: Failed to load Material Icons font from: " << icon_font_path << std::endl;
+        }
+    #endif
     
     // Add Unicode ranges for symbol/emoji support (limited to 16-bit ranges)
     static const ImWchar ranges[] = {
@@ -287,23 +285,27 @@ void VerseFinderApp::setupImGuiStyle() {
     style.FrameBorderSize = 0.0f;
     style.PopupBorderSize = 1.0f;
     
-    // Rounding
-    style.WindowRounding = 8.0f;
-    style.ChildRounding = 6.0f;
-    style.FrameRounding = 6.0f;
-    style.PopupRounding = 6.0f;
-    style.ScrollbarRounding = 8.0f;
-    style.GrabRounding = 6.0f;
-    style.TabRounding = 6.0f;
+    // Modern rounding for sleek appearance
+    style.WindowRounding = 10.0f;
+    style.ChildRounding = 8.0f;
+    style.FrameRounding = 8.0f;
+    style.PopupRounding = 8.0f;
+    style.ScrollbarRounding = 10.0f;
+    style.GrabRounding = 8.0f;
+    style.TabRounding = 8.0f;
     
-    // Spacing
-    style.WindowPadding = ImVec2(12, 12);
-    style.FramePadding = ImVec2(8, 6);
-    style.ItemSpacing = ImVec2(8, 6);
-    style.ItemInnerSpacing = ImVec2(6, 4);
-    style.IndentSpacing = 20.0f;
-    style.ScrollbarSize = 16.0f;
-    style.GrabMinSize = 12.0f;
+    // Enhanced spacing for better readability
+    style.WindowPadding = ImVec2(16, 16);
+    style.FramePadding = ImVec2(12, 8);
+    style.ItemSpacing = ImVec2(10, 8);
+    style.ItemInnerSpacing = ImVec2(8, 6);
+    style.IndentSpacing = 24.0f;
+    style.ScrollbarSize = 18.0f;
+    style.GrabMinSize = 14.0f;
+    
+    // Additional modern styling
+    style.WindowTitleAlign = ImVec2(0.5f, 0.5f); // Center window titles
+    style.ButtonTextAlign = ImVec2(0.5f, 0.5f);  // Center button text
     
     // Apply font scaling
     ImGui::GetIO().FontGlobalScale = userSettings.display.fontSize / 16.0f;
@@ -313,21 +315,21 @@ void VerseFinderApp::applyDarkTheme() {
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
     
-    // Dark theme colors
-    colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-    colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.11f, 0.12f, 1.00f);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.15f, 0.15f, 0.16f, 1.00f);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
-    colors[ImGuiCol_Border] = ImVec4(0.28f, 0.28f, 0.29f, 0.50f);
+    // Modern dark theme colors with improved contrast and aesthetics
+    colors[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.95f, 1.00f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.55f, 0.55f, 0.60f, 1.00f);
+    colors[ImGuiCol_WindowBg] = ImVec4(0.09f, 0.09f, 0.11f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
+    colors[ImGuiCol_PopupBg] = ImVec4(0.06f, 0.06f, 0.07f, 0.96f);
+    colors[ImGuiCol_Border] = ImVec4(0.25f, 0.25f, 0.28f, 0.60f);
     colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.25f, 0.27f, 1.00f);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.30f, 0.30f, 0.32f, 1.00f);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.00f);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.29f, 0.48f, 1.00f);
-    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-    colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.15f, 0.18f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.20f, 0.20f, 0.25f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.06f, 0.06f, 0.07f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.20f, 0.35f, 0.60f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
     colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
     colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
@@ -578,8 +580,8 @@ void VerseFinderApp::run() {
         
         // Create menu bar
         if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Settings", "Ctrl+,")) {
+            if (ImGui::BeginMenu(ICON_MD_FOLDER " File")) {
+                if (ImGui::MenuItem(ICON_MD_SETTINGS " Settings", "Ctrl+,")) {
                     show_settings_window = true;
                 }
                 ImGui::Separator();
@@ -588,25 +590,25 @@ void VerseFinderApp::run() {
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu("Edit")) {
-                if (ImGui::MenuItem("Clear Search", "Ctrl+K")) {
+            if (ImGui::BeginMenu(ICON_MD_EDIT " Edit")) {
+                if (ImGui::MenuItem(ICON_MD_CLEAR " Clear Search", "Ctrl+K")) {
                     clearSearch();
                 }
-                if (ImGui::MenuItem("Copy Verse", "Ctrl+C", false, !selected_verse_text.empty())) {
+                if (ImGui::MenuItem(ICON_MD_COPY " Copy Verse", "Ctrl+C", false, !selected_verse_text.empty())) {
                     copyToClipboard(selected_verse_text);
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu("View")) {
+            if (ImGui::BeginMenu(ICON_MD_VISIBILITY " View")) {
                 ImGui::MenuItem("Auto Search", nullptr, &auto_search);
                 ImGui::MenuItem("Performance Stats", nullptr, &show_performance_stats);
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu("Help")) {
-                if (ImGui::MenuItem("Help", "F1")) {
+            if (ImGui::BeginMenu(ICON_MD_HELP " Help")) {
+                if (ImGui::MenuItem(ICON_MD_HELP " Help", "F1")) {
                     show_help_window = true;
                 }
-                if (ImGui::MenuItem("About")) {
+                if (ImGui::MenuItem(ICON_MD_INFO " About")) {
                     show_about_window = true;
                 }
                 ImGui::EndMenu();
@@ -690,19 +692,36 @@ void VerseFinderApp::renderMainWindow() {
 }
 
 void VerseFinderApp::renderSearchArea() {
-    ImGui::Text("Bible Search");
+    // Modern search header with better styling
+    ImGui::PushFont(icon_font);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+    ImGui::Text(ICON_MD_SEARCH);
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::Text(" Bible Search");
+    ImGui::Separator();
     ImGui::Spacing();
     
-    // Search input
+    // Modern search input with enhanced styling
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.2f, 0.2f, 0.25f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.25f, 0.25f, 0.3f, 1.0f));
     ImGui::PushItemWidth(-1);
     bool search_changed = ImGui::InputTextWithHint("##search", "Enter verse reference (e.g., 'John 3:16') or keywords...", 
                                                   search_input, sizeof(search_input), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::PopItemWidth();
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
     
-    // Search history dropdown (if history exists)
+    // Search history dropdown with modern styling
     if (!userSettings.content.searchHistory.empty()) {
         ImGui::Spacing();
-        if (ImGui::BeginCombo("Recent Searches", nullptr)) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.3f, 0.35f, 1.0f));
+        if (ImGui::BeginCombo(ICON_MD_HISTORY " Recent Searches", nullptr)) {
             for (const auto& historical_search : userSettings.content.searchHistory) {
                 if (ImGui::Selectable(historical_search.c_str())) {
                     strncpy(search_input, historical_search.c_str(), sizeof(search_input) - 1);
@@ -712,6 +731,8 @@ void VerseFinderApp::renderSearchArea() {
             }
             ImGui::EndCombo();
         }
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar();
     }
     
     // Auto-search or manual search
@@ -720,15 +741,31 @@ void VerseFinderApp::renderSearchArea() {
         performSearch();
     }
     
-    // Search buttons and controls
+    // Modern button styling
     ImGui::Spacing();
-    if (ImGui::Button("Search", ImVec2(100, 0))) {
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
+    
+    // Primary search button
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.4f, 0.8f, 1.0f));
+    if (ImGui::Button(ICON_MD_SEARCH " Search", ImVec2(100, 0))) {
         performSearch();
     }
+    ImGui::PopStyleColor(3);
+    
     ImGui::SameLine();
-    if (ImGui::Button("Clear", ImVec2(80, 0))) {
+    
+    // Secondary clear button
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.6f, 0.6f, 0.4f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.7f, 0.7f, 0.6f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+    if (ImGui::Button(ICON_MD_CLEAR " Clear", ImVec2(80, 0))) {
         clearSearch();
     }
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
     ImGui::SameLine();
     ImGui::Text("Auto: ");
     ImGui::SameLine();
@@ -752,7 +789,7 @@ void VerseFinderApp::renderSearchArea() {
         // Book name suggestions
         if (!book_suggestions.empty()) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Did you mean:");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), ICON_MD_BOOK " Did you mean:");
             for (size_t i = 0; i < std::min(book_suggestions.size(), size_t(3)); ++i) {
                 const auto& suggestion = book_suggestions[i];
                 std::string confidence_text = "";
@@ -778,7 +815,7 @@ void VerseFinderApp::renderSearchArea() {
         // Query keyword suggestions
         if (!query_suggestions.empty()) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Suggestions:");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), ICON_MD_CHAT_BUBBLE " Suggestions:");
             for (size_t i = 0; i < std::min(query_suggestions.size(), size_t(3)); ++i) {
                 if (ImGui::SmallButton(query_suggestions[i].c_str())) {
                     strncpy(search_input, query_suggestions[i].c_str(), sizeof(search_input) - 1);
@@ -795,7 +832,7 @@ void VerseFinderApp::renderSearchArea() {
     // Search hints
     if (strlen(search_input) == 0) {
         ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Examples:");
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), ICON_MD_LIGHTBULB " Examples:");
         ImGui::BulletText("John 3:16 - Find specific verse");
         ImGui::BulletText("love - Find verses with keyword");
         ImGui::BulletText("faith hope love - Find multiple keywords");
@@ -803,7 +840,7 @@ void VerseFinderApp::renderSearchArea() {
         
         if (fuzzy_search_enabled) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Fuzzy Search Examples:");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), ICON_MD_SEARCH " Fuzzy Search Examples:");
             ImGui::BulletText("Jhn 3:16 - Corrects typos in book names");
             ImGui::BulletText("luv - Finds 'love' with phonetic matching");
             ImGui::BulletText("Gen - Suggests 'Genesis' from partial match");
@@ -814,7 +851,7 @@ void VerseFinderApp::renderSearchArea() {
 
 void VerseFinderApp::renderSearchResults() {
     if (!bible.isReady()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading Bible data...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ICON_MD_REFRESH " Loading Bible data...");
         return;
     }
     
@@ -823,14 +860,14 @@ void VerseFinderApp::renderSearchResults() {
             ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No verses found");
             ImGui::Text("Try different keywords or check the reference");
         } else {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enter search terms above");
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), ICON_MD_BOOK " Enter search terms above");
         }
         return;
     }
     
     // Show different headers based on search type
     if (is_viewing_chapter) {
-        ImGui::Text("%s Chapter %d (%d verses)", 
+        ImGui::Text(ICON_MD_BOOK " %s Chapter %d (%d verses)", 
                    current_chapter_book.c_str(), current_chapter_number, (int)search_results.size());
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Click any verse to jump to it");
     } else {
@@ -939,7 +976,7 @@ void VerseFinderApp::renderSearchResults() {
         if (ImGui::BeginPopupContextItem(("context_" + std::to_string(i)).c_str())) {
             bool isFavorite = userSettings.isFavoriteVerse(result);
             if (isFavorite) {
-                if (ImGui::MenuItem("Remove from Favorites")) {
+                if (ImGui::MenuItem(ICON_MD_FAVORITE_BORDER " Remove from Favorites")) {
                     userSettings.removeFavoriteVerse(result);
                 }
             } else {
@@ -947,7 +984,7 @@ void VerseFinderApp::renderSearchResults() {
                     userSettings.addFavoriteVerse(result);
                 }
             }
-            if (ImGui::MenuItem("Copy to Clipboard")) {
+            if (ImGui::MenuItem(ICON_MD_COPY " Copy to Clipboard")) {
                 copyToClipboard(result);
             }
             if (ImGui::MenuItem("View Full Verse")) {
@@ -977,7 +1014,7 @@ void VerseFinderApp::renderTranslationSelector() {
     ImGui::Text("📚 Translation");
     
     if (!bible.isReady()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ICON_MD_REFRESH " Loading...");
         return;
     }
     
@@ -1011,7 +1048,7 @@ void VerseFinderApp::renderTranslationSelector() {
         ImGui::EndCombo();
     }
     
-    if (ImGui::Button("Manage Translations", ImVec2(-1, 0))) {
+    if (ImGui::Button(ICON_MD_SETTINGS " Manage Translations", ImVec2(-1, 0))) {
         show_settings_window = true;
     }
 }
@@ -1019,11 +1056,11 @@ void VerseFinderApp::renderTranslationSelector() {
 void VerseFinderApp::renderStatusBar() {
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text("Status");
+    ImGui::Text(ICON_MD_INFO " Status");
     
     if (bible.isReady()) {
         const auto& translations = bible.getTranslations();
-        ImGui::Text("Ready - %d translation(s) loaded", (int)translations.size());
+        ImGui::Text(ICON_MD_CHECK_CIRCLE " Ready - %d translation(s) loaded", (int)translations.size());
         
         if (!search_results.empty()) {
             ImGui::Text("Found %d verse(s)", (int)search_results.size());
@@ -1034,16 +1071,16 @@ void VerseFinderApp::renderStatusBar() {
         
         // Performance information
         if (last_search_time_ms > 0.0) {
-            ImGui::Text("Search: %.2f ms", last_search_time_ms);
+            ImGui::Text(ICON_MD_REFRESH " Search: %.2f ms", last_search_time_ms);
         }
     } else {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading Bible data...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ICON_MD_REFRESH " Loading Bible data...");
     }
     
     // Selected verse preview
     if (!selected_verse_text.empty()) {
         ImGui::Spacing();
-        ImGui::Text("Selected Verse:");
+        ImGui::Text(ICON_MD_SEARCH " Selected Verse:");
         ImGui::Separator();
         
         std::string reference = formatVerseReference(selected_verse_text);
@@ -1055,7 +1092,7 @@ void VerseFinderApp::renderStatusBar() {
         ImGui::Text("%s", verse_text.c_str());
         ImGui::PopTextWrapPos();
         
-        if (ImGui::Button("View Full", ImVec2(-1, 0))) {
+        if (ImGui::Button(ICON_MD_REMOVE_RED_EYE " View Full", ImVec2(-1, 0))) {
             show_verse_modal = true;
         }
     }
@@ -1064,7 +1101,7 @@ void VerseFinderApp::renderStatusBar() {
 void VerseFinderApp::renderVerseModal() {
     ImGui::SetNextWindowSize(ImVec2(900, 650), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("Verse Details", &show_verse_modal, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::Begin(ICON_MD_BOOK " Verse Details", &show_verse_modal, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (!selected_verse_text.empty()) {
             std::string reference = formatVerseReference(selected_verse_text);
             std::string verse_text = formatVerseText(selected_verse_text);
@@ -1092,19 +1129,19 @@ void VerseFinderApp::renderVerseModal() {
             ImGui::Spacing();
             
             // Enhanced navigation buttons
-            if (ImGui::Button("-10", ImVec2(70, 35))) {
+            if (ImGui::Button("<< -10", ImVec2(70, 35))) {
                 navigateToVerse(-10);
             }
             ImGui::SameLine();
-            if (ImGui::Button("-1", ImVec2(60, 35))) {
+            if (ImGui::Button("< -1", ImVec2(60, 35))) {
                 navigateToVerse(-1);
             }
             ImGui::SameLine();
-            if (ImGui::Button("+1", ImVec2(60, 35))) {
+            if (ImGui::Button("+1 >", ImVec2(60, 35))) {
                 navigateToVerse(1);
             }
             ImGui::SameLine();
-            if (ImGui::Button("+10", ImVec2(70, 35))) {
+            if (ImGui::Button("+10 >>", ImVec2(70, 35))) {
                 navigateToVerse(10);
             }
             ImGui::SameLine();
@@ -1112,7 +1149,7 @@ void VerseFinderApp::renderVerseModal() {
             ImGui::SameLine();
             
             // Action buttons
-            if (ImGui::Button("Copy", ImVec2(100, 35))) {
+            if (ImGui::Button(ICON_MD_COPY " Copy", ImVec2(100, 35))) {
                 copyToClipboard(selected_verse_text);
             }
             ImGui::SameLine();
@@ -1127,9 +1164,9 @@ void VerseFinderApp::renderVerseModal() {
 void VerseFinderApp::renderSettingsWindow() {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("Settings", &show_settings_window)) {
+    if (ImGui::Begin(ICON_MD_SETTINGS " Settings", &show_settings_window)) {
         if (ImGui::BeginTabBar("SettingsTabs")) {
-            if (ImGui::BeginTabItem("📚 Translations")) {
+            if (ImGui::BeginTabItem(ICON_MD_LIBRARY_BOOKS " Translations")) {
                 ImGui::Text("Manage Bible translations for VerseFinder");
                 ImGui::Separator();
                 
@@ -1195,12 +1232,12 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
-            if (ImGui::BeginTabItem("🎨 Appearance")) {
+            if (ImGui::BeginTabItem(ICON_MD_PALETTE " Appearance")) {
                 ImGui::Text("Customize the appearance of VerseFinder");
                 ImGui::Separator();
                 
                 // Font Settings
-                ImGui::Text("🔤 Font Settings");
+                ImGui::Text(ICON_MD_FONT_DOWNLOAD " Font Settings");
                 ImGui::Spacing();
                 
                 // Font size slider
@@ -1216,7 +1253,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Theme Settings
-                ImGui::Text("🎨 Color Theme");
+                ImGui::Text(ICON_MD_PALETTE " Color Theme");
                 ImGui::Spacing();
                 
                 // Theme selection
@@ -1254,7 +1291,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Window Settings
-                ImGui::Text("Window Settings");
+                ImGui::Text(ICON_MD_WINDOW " Window Settings");
                 ImGui::Spacing();
                 
                 bool rememberWindow = userSettings.display.rememberWindowState;
@@ -1280,7 +1317,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // General Search Settings
-                ImGui::Text("General Search Settings");
+                ImGui::Text(ICON_MD_SETTINGS " General Search Settings");
                 ImGui::Spacing();
                 
                 // Default translation
@@ -1348,7 +1385,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Fuzzy search settings
-                ImGui::Text("Fuzzy Search Settings");
+                ImGui::Text(ICON_MD_SEARCH " Fuzzy Search Settings");
                 ImGui::Spacing();
                 
                 bool fuzzyEnabled = userSettings.search.fuzzySearchEnabled;
@@ -1409,7 +1446,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     ImGui::Spacing();
                     ImGui::Separator();
-                    ImGui::Text("Fuzzy Search Examples:");
+                    ImGui::Text(ICON_MD_LIGHTBULB " Fuzzy Search Examples:");
                     ImGui::BulletText("'Jhn 3:16' → 'John 3:16' (typo correction)");
                     ImGui::BulletText("'luv' → verses about 'love' (phonetic matching)");
                     ImGui::BulletText("'Gen' → 'Genesis' (partial matching)");
@@ -1419,7 +1456,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
-            if (ImGui::BeginTabItem("📚 Content")) {
+            if (ImGui::BeginTabItem(ICON_MD_LIBRARY_BOOKS " Content")) {
                 ImGui::Text("Manage favorites, history, and content preferences");
                 ImGui::Separator();
                 
@@ -1449,7 +1486,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Search History section
-                ImGui::Text("🕒 Search History");
+                ImGui::Text(ICON_MD_ACCESS_TIME " Search History");
                 ImGui::Spacing();
                 
                 bool saveHistory = userSettings.content.saveSearchHistory;
@@ -1484,7 +1521,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Verse Display Format
-                ImGui::Text("📝 Verse Display");
+                ImGui::Text(ICON_MD_DESCRIPTION " Verse Display");
                 ImGui::Spacing();
                 
                 const char* displayFormats[] = { "Standard", "Compact", "Detailed" };
@@ -1505,7 +1542,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Recent Translations
-                ImGui::Text("🔄 Recent Translations");
+                ImGui::Text(ICON_MD_RESTORE " Recent Translations");
                 ImGui::Spacing();
                 
                 ImGui::Text("Recently used: %zu", userSettings.content.recentTranslations.size());
@@ -1680,7 +1717,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     }
                     
                     ImGui::Separator();
-                    ImGui::Text("Advanced Options");
+                    ImGui::Text(ICON_MD_SETTINGS " Advanced Options");
                     ImGui::Spacing();
                     
                     // OBS optimization
@@ -1716,7 +1753,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
-            if (ImGui::BeginTabItem("Shortcuts")) {
+            if (ImGui::BeginTabItem(ICON_MD_KEYBOARD " Shortcuts")) {
                 ImGui::Text("Keyboard shortcuts for VerseFinder");
                 ImGui::Separator();
                 
@@ -1740,12 +1777,12 @@ void VerseFinderApp::renderSettingsWindow() {
         ImGui::Separator();
         
         // Settings management buttons
-        if (ImGui::Button("💾 Save Settings", ImVec2(120, 0))) {
+        if (ImGui::Button(ICON_MD_SAVE " Save Settings", ImVec2(120, 0))) {
             saveSettings();
         }
         ImGui::SameLine();
         
-        if (ImGui::Button("📤 Export", ImVec2(120, 0))) {
+        if (ImGui::Button(ICON_MD_CLOUD_UPLOAD " Export", ImVec2(120, 0))) {
             // Simple export to current directory for now
             std::string exportPath = getExecutablePath() + "/exported_settings.json";
             if (exportSettings(exportPath)) {
@@ -1756,7 +1793,7 @@ void VerseFinderApp::renderSettingsWindow() {
         }
         ImGui::SameLine();
         
-        if (ImGui::Button("📥 Import", ImVec2(120, 0))) {
+        if (ImGui::Button(ICON_MD_CLOUD_DOWNLOAD " Import", ImVec2(120, 0))) {
             // Simple import from current directory for now
             std::string importPath = getExecutablePath() + "/exported_settings.json";
             if (importSettings(importPath)) {
@@ -1774,7 +1811,7 @@ void VerseFinderApp::renderSettingsWindow() {
         
         ImGui::Spacing();
         
-        if (ImGui::Button("🔄 Reset to Defaults", ImVec2(150, 0))) {
+        if (ImGui::Button(ICON_MD_RESTORE " Reset to Defaults", ImVec2(150, 0))) {
             resetSettingsToDefault();
             // Apply reset settings immediately
             fuzzy_search_enabled = userSettings.search.fuzzySearchEnabled;
@@ -1795,8 +1832,8 @@ void VerseFinderApp::renderSettingsWindow() {
 void VerseFinderApp::renderAboutWindow() {
     ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("About VerseFinder", &show_about_window, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("VerseFinder");
+    if (ImGui::Begin(ICON_MD_INFO " About VerseFinder", &show_about_window, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text(ICON_MD_SEARCH " VerseFinder");
         ImGui::Text("Bible Search for Churches");
         ImGui::Separator();
         
@@ -1825,7 +1862,7 @@ void VerseFinderApp::renderAboutWindow() {
 void VerseFinderApp::renderHelpWindow() {
     ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("❓ Help", &show_help_window)) {
+    if (ImGui::Begin(ICON_MD_HELP " Help", &show_help_window)) {
         ImGui::Text("How to Search");
         ImGui::Separator();
         
@@ -1848,7 +1885,7 @@ void VerseFinderApp::renderHelpWindow() {
         ImGui::BulletText("Switch between translations");
         
         ImGui::Spacing();
-        ImGui::Text("Keyboard Shortcuts");
+        ImGui::Text(ICON_MD_KEYBOARD " Keyboard Shortcuts");
         ImGui::Separator();
         ImGui::BulletText("Ctrl+K - Clear search");
         ImGui::BulletText("Ctrl+C - Copy verse");
@@ -1867,7 +1904,7 @@ void VerseFinderApp::renderHelpWindow() {
 void VerseFinderApp::renderPerformanceWindow() {
     ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("⚡ Performance Statistics", &show_performance_stats)) {
+    if (ImGui::Begin(ICON_MD_ANALYTICS " Performance Statistics", &show_performance_stats)) {
         ImGui::Text("Search Performance");
         ImGui::Separator();
         
@@ -1905,7 +1942,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             }
             
             ImGui::Spacing();
-            ImGui::Text("💾 Memory & System");
+            ImGui::Text(ICON_MD_MEMORY " Memory & System");
             ImGui::Separator();
             
             // Memory usage (if available)
@@ -1917,7 +1954,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             }
             
             ImGui::Spacing();
-            ImGui::Text("Performance Targets");
+            ImGui::Text(ICON_MD_INFO " Performance Targets");
             ImGui::Separator();
             
             ImGui::BulletText("Reference Search: < 5ms");
@@ -1926,7 +1963,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             ImGui::BulletText("Cache Hit Rate: > 80%%");
             
             ImGui::Spacing();
-            ImGui::Text("Cache Management");
+            ImGui::Text(ICON_MD_SETTINGS " Cache Management");
             ImGui::Separator();
             
             if (ImGui::Button("Clear Search Cache")) {

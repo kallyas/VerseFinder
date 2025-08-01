@@ -110,6 +110,7 @@ private:
     bool show_memory_window = false;
     
     // UI styling
+    ImFont* icon_font = nullptr;
     void setupImGuiStyle();
     void applyDarkTheme();
     void applyLightTheme();

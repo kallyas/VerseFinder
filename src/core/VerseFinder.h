@@ -12,6 +12,7 @@
 #include "SearchOptimizer.h"
 #include "PerformanceBenchmark.h"
 #include "FuzzySearch.h"
+#include "AutoComplete.h"
 
 using json = nlohmann::json;
 
@@ -45,6 +46,9 @@ private:
     // Fuzzy search component
     FuzzySearch fuzzy_search;
     bool fuzzy_search_enabled = false;
+    
+    // Auto-complete component
+    AutoComplete auto_complete;
 
     void loadBibleInternal(const std::string& filename);
     void loadTranslationsFromDirectory(const std::string& dir_path);
@@ -97,6 +101,12 @@ public:
     std::vector<std::string> searchByKeywordsFuzzy(const std::string& query, const std::string& translation) const;
     std::vector<FuzzyMatch> findBookNameSuggestions(const std::string& query) const;
     std::vector<std::string> generateQuerySuggestions(const std::string& query, const std::string& translation) const;
+    
+    // Auto-complete methods
+    std::vector<std::string> getAutoCompletions(const std::string& input, int max_results = 10) const;
+    std::vector<std::string> getSmartSuggestions(const std::string& input, int max_results = 10) const;
+    void updateAutoCompleteFrequency(const std::string& query);
+    void clearAutoCompleteCache();
 };
 
 #endif //VERSEFINDER_H

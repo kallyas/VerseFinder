@@ -30,6 +30,7 @@ if(NOT GLFW3_FOUND)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
     
     FetchContent_MakeAvailable(glfw)
     
@@ -189,6 +190,9 @@ add_executable(VerseFinder
     src/core/PerformanceBenchmark.cpp
     src/core/FuzzySearch.cpp
     src/core/UserSettings.cpp
+    src/core/AutoComplete.cpp
+    src/core/MemoryMonitor.cpp
+    src/core/IncrementalSearch.cpp
     src/ui/VerseFinderApp.cpp
     ${IMGUI_SOURCES}
 )
@@ -196,6 +200,8 @@ add_executable(VerseFinder
 # Compiler definitions for OpenGL loader
 target_compile_definitions(VerseFinder PRIVATE 
     ${OPENGL_LOADER_DEFINITIONS}
+    GENTIUM_FONT_PATH="${GENTIUM_FONT_PATH}"
+    FONT_BASE_PATH="${FONT_BASE_PATH}"
 )
 
 # On macOS with custom loader, force include our OpenGL header
@@ -272,10 +278,69 @@ file(COPY data/ DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY assets/ DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY fonts/ DESTINATION ${CMAKE_BINARY_DIR}/fonts)
 
+# Define font paths for compile-time configuration
+set(FONT_BASE_PATH "${CMAKE_BINARY_DIR}/fonts")
+set(GENTIUM_FONT_PATH "${FONT_BASE_PATH}/Gentium_Plus/GentiumPlus-Regular.ttf")
+
 # Create translations directory structure
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/translations)
 
 # Copy bible.json if it exists (for backward compatibility)
 if(EXISTS ${CMAKE_SOURCE_DIR}/bible.json)
     file(COPY bible.json DESTINATION ${CMAKE_BINARY_DIR})
+endif()
+
+# Add performance test executable
+add_executable(performance_test
+    performance_test.cpp
+    src/core/VerseFinder.cpp
+    src/core/SearchCache.cpp
+    src/core/SearchOptimizer.cpp
+    src/core/PerformanceBenchmark.cpp
+    src/core/FuzzySearch.cpp
+    src/core/UserSettings.cpp
+    src/core/AutoComplete.cpp
+    src/core/MemoryMonitor.cpp
+    src/core/IncrementalSearch.cpp
+)
+
+# Link libraries for performance test
+target_link_libraries(performance_test
+    ${GLFW3_LIBRARIES}
+    ${OPENGL_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+)
+
+if(TARGET nlohmann_json::nlohmann_json)
+    target_link_libraries(performance_test nlohmann_json::nlohmann_json)
+elseif(TARGET nlohmann_json)
+    target_link_libraries(performance_test nlohmann_json)
+endif()
+
+# Platform-specific linking for performance test
+if(APPLE)
+    target_link_libraries(performance_test
+        "-framework OpenGL"
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+    )
+elseif(WIN32)
+    target_link_libraries(performance_test
+        opengl32
+        gdi32
+        shell32
+        user32
+        kernel32
+    )
+elseif(UNIX AND NOT APPLE)
+    find_package(Threads REQUIRED)
+    target_link_libraries(performance_test
+        Threads::Threads
+        ${CMAKE_DL_LIBS}
+    )
+    
+    if(X11_FOUND)
+        target_link_libraries(performance_test ${X11_LIBRARIES})
+    endif()
 endif()

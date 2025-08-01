@@ -62,6 +62,10 @@ void VerseFinder::loadBibleInternal(const std::string& filename) {
             }
         }
     }
+    
+    // Build auto-complete index after loading data
+    auto_complete.buildIndex(verses);
+    
     data_loaded = true;
     std::cout << "Loaded " << available_translations.size() << " translations." << std::endl;
 }
@@ -989,7 +993,7 @@ std::vector<std::string> VerseFinder::searchByKeywordsFuzzy(const std::string& q
                 if (match.matchType == "fuzzy") {
                     confidence_indicator = " [~" + std::to_string(static_cast<int>(match.confidence * 100)) + "%]";
                 } else if (match.matchType == "phonetic") {
-                    confidence_indicator = " [♪]";
+                    confidence_indicator = " [phonetic]";
                 } else if (match.matchType == "partial") {
                     confidence_indicator = " [...]";
                 }
@@ -1038,4 +1042,27 @@ std::vector<std::string> VerseFinder::generateQuerySuggestions(const std::string
     }
     
     return fuzzy_search.generateSuggestions(query, keywords);
+}
+
+// Auto-complete method implementations
+std::vector<std::string> VerseFinder::getAutoCompletions(const std::string& input, int max_results) const {
+    if (!isReady()) return {};
+    
+    BENCHMARK_SCOPE("AutoComplete::getCompletions");
+    return auto_complete.getCompletions(input, max_results);
+}
+
+std::vector<std::string> VerseFinder::getSmartSuggestions(const std::string& input, int max_results) const {
+    if (!isReady()) return {};
+    
+    BENCHMARK_SCOPE("AutoComplete::getSmartSuggestions");
+    return auto_complete.getSmartSuggestions(input, max_results);
+}
+
+void VerseFinder::updateAutoCompleteFrequency(const std::string& query) {
+    auto_complete.updateWordFrequency(query);
+}
+
+void VerseFinder::clearAutoCompleteCache() {
+    auto_complete.clearCache();
 }

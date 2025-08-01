@@ -993,7 +993,7 @@ std::vector<std::string> VerseFinder::searchByKeywordsFuzzy(const std::string& q
                 if (match.matchType == "fuzzy") {
                     confidence_indicator = " [~" + std::to_string(static_cast<int>(match.confidence * 100)) + "%]";
                 } else if (match.matchType == "phonetic") {
-                    confidence_indicator = " [♪]";
+                    confidence_indicator = " [phonetic]";
                 } else if (match.matchType == "partial") {
                     confidence_indicator = " [...]";
                 }

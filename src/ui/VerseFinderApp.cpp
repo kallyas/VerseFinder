@@ -42,89 +42,9 @@ VerseFinderApp::~VerseFinderApp() {
     cleanup();
 }
 
-float VerseFinderApp::getSystemFontSize() const {
-#ifdef __APPLE__
-    // Get the system font size using Core Text on macOS
-    CTFontRef systemFont = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 0.0, NULL);
-    if (systemFont) {
-        CGFloat fontSize = 24.0f; // Default size
-        CFRelease(systemFont);
-        // Return the system font size, but ensure it's at least 12 and at most 24 for readability
-        return std::max(12.0f, std::min(24.0f, static_cast<float>(fontSize)));
-    }
-#endif
-    // Fallback to a reasonable default size
-    return 16.0f;
-}
 
 void VerseFinderApp::glfwErrorCallback(int error, const char* description) {
     std::cerr << "GLFW Error " << error << ": " << description << std::endl;
-}
-
-std::string VerseFinderApp::getExecutablePath() const {
-#ifdef __APPLE__
-    char buffer[PATH_MAX];
-    uint32_t path_len = sizeof(buffer);
-    if (_NSGetExecutablePath(buffer, &path_len) == 0) {
-        return std::filesystem::path(buffer).parent_path().string();
-    }
-#elif defined(__linux__)
-    char buffer[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
-    if (len != -1) {
-        buffer[len] = '\0';
-        return std::filesystem::path(buffer).parent_path().string();
-    }
-#elif defined(_WIN32)
-    char buffer[MAX_PATH];
-    GetModuleFileNameA(NULL, buffer, MAX_PATH);
-    return std::filesystem::path(buffer).parent_path().string();
-#endif
-    return "";
-}
-
-std::string VerseFinderApp::getSettingsFilePath() const {
-    std::string settingsDir;
-    
-#ifdef __APPLE__
-    // Use ~/Library/Application Support/VerseFinder/ on macOS
-    const char* home = getenv("HOME");
-    if (home) {
-        settingsDir = std::string(home) + "/Library/Application Support/VerseFinder";
-    }
-#elif defined(__linux__)
-    // Use ~/.config/VerseFinder/ on Linux (XDG Base Directory)
-    const char* configHome = getenv("XDG_CONFIG_HOME");
-    if (configHome) {
-        settingsDir = std::string(configHome) + "/VerseFinder";
-    } else {
-        const char* home = getenv("HOME");
-        if (home) {
-            settingsDir = std::string(home) + "/.config/VerseFinder";
-        }
-    }
-#elif defined(_WIN32)
-    // Use %APPDATA%/VerseFinder/ on Windows
-    char appDataPath[MAX_PATH];
-    if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath) == S_OK) {
-        settingsDir = std::string(appDataPath) + "\\VerseFinder";
-    }
-#endif
-    
-    // Fallback to executable directory if platform-specific path fails
-    if (settingsDir.empty()) {
-        settingsDir = getExecutablePath();
-    }
-    
-    // Create directory if it doesn't exist
-    try {
-        std::filesystem::create_directories(settingsDir);
-    } catch (const std::exception& e) {
-        std::cerr << "Failed to create settings directory: " << e.what() << std::endl;
-        return getExecutablePath() + "/settings.json"; // Fallback
-    }
-    
-    return settingsDir + "/settings.json";
 }
 
 bool VerseFinderApp::init() {
@@ -203,7 +123,7 @@ bool VerseFinderApp::init() {
     ImGui_ImplOpenGL3_Init(glsl_version);
     
     // Load fonts with symbol support using system font size
-    float systemFontSize = getSystemFontSize();
+    float systemFontSize = font_manager->getSystemFontSize();
     
     // Try to load a custom font with fallback to default
     std::vector<std::string> font_paths;
@@ -214,7 +134,7 @@ bool VerseFinderApp::init() {
     #endif
     
     // Runtime path resolution
-    std::string exe_dir = getExecutablePath();
+    std::string exe_dir = PlatformUtils::PlatformUtils::getExecutablePath();
     font_paths.push_back(exe_dir + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf");
     font_paths.push_back(exe_dir + "/fonts/arial/ARIAL.TTF");
     
@@ -265,7 +185,7 @@ bool VerseFinderApp::init() {
     #endif
     
     // Setup translations directory and load all translations
-    std::string translations_path = getExecutablePath() + "/translations";
+    std::string translations_path = PlatformUtils::PlatformUtils::getExecutablePath() + "/translations";
     bible.setTranslationsDirectory(translations_path);
     bible.loadAllTranslations();
     
@@ -1668,7 +1588,7 @@ void VerseFinderApp::renderSettingsWindow() {
         
         if (ImGui::Button("📤 Export", ImVec2(120, 0))) {
             // Simple export to current directory for now
-            std::string exportPath = getExecutablePath() + "/exported_settings.json";
+            std::string exportPath = PlatformUtils::getExecutablePath() + "/exported_settings.json";
             if (exportSettings(exportPath)) {
                 std::cout << "Settings exported to: " << exportPath << std::endl;
             } else {
@@ -1679,7 +1599,7 @@ void VerseFinderApp::renderSettingsWindow() {
         
         if (ImGui::Button("📥 Import", ImVec2(120, 0))) {
             // Simple import from current directory for now
-            std::string importPath = getExecutablePath() + "/exported_settings.json";
+            std::string importPath = PlatformUtils::getExecutablePath() + "/exported_settings.json";
             if (importSettings(importPath)) {
                 std::cout << "Settings imported from: " << importPath << std::endl;
                 // Apply imported settings immediately
@@ -2186,9 +2106,9 @@ void VerseFinderApp::downloadTranslation(const std::string& url, const std::stri
             
             // Try to find existing translation file in common locations first
             std::vector<std::string> search_paths = {
-                getExecutablePath() + "/translations/" + filename,
-                getExecutablePath() + "/" + filename,
-                getExecutablePath() + "/data/" + filename,
+                PlatformUtils::getExecutablePath() + "/translations/" + filename,
+                PlatformUtils::getExecutablePath() + "/" + filename,
+                PlatformUtils::getExecutablePath() + "/data/" + filename,
                 "./translations/" + filename,
                 "./" + filename
             };
@@ -2307,7 +2227,7 @@ bool VerseFinderApp::isTranslationAvailable(const std::string& name) const {
 
 bool VerseFinderApp::saveSettings() const {
     try {
-        std::string settingsPath = getSettingsFilePath();
+        std::string settingsPath = PlatformUtils::getSettingsFilePath();
         
         // Update window state in settings if remembering position
         if (userSettings.display.rememberWindowState && window) {
@@ -2353,7 +2273,7 @@ bool VerseFinderApp::saveSettings() const {
 
 bool VerseFinderApp::loadSettings() {
     try {
-        std::string settingsPath = getSettingsFilePath();
+        std::string settingsPath = PlatformUtils::getSettingsFilePath();
         
         if (!std::filesystem::exists(settingsPath)) {
             std::cout << "Settings file not found, using defaults: " << settingsPath << std::endl;
@@ -2465,9 +2385,9 @@ std::string VerseFinderApp::getTranslationFilename(const std::string& translatio
 void VerseFinderApp::scanForExistingTranslations() {
     // Common search paths for translation files
     std::vector<std::string> search_directories = {
-        getExecutablePath() + "/translations/",
-        getExecutablePath() + "/",
-        getExecutablePath() + "/data/",
+        PlatformUtils::getExecutablePath() + "/translations/",
+        PlatformUtils::getExecutablePath() + "/",
+        PlatformUtils::getExecutablePath() + "/data/",
         "./translations/",
         "./"
     };

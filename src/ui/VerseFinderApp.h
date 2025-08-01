@@ -31,6 +31,7 @@
 #include "settings/ThemeManager.h"
 #include "system/FontManager.h"
 #include "system/WindowManager.h"
+#include "system/PlatformUtils.h"
 #include "modals/SettingsModal.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -221,16 +222,11 @@ private:
     void handleKeyboardShortcuts();
     
     // File operations
-    std::string getExecutablePath() const;
-    std::string getSettingsFilePath() const;
     bool saveSettings() const;
     bool loadSettings();
     void resetSettingsToDefault();
     bool exportSettings(const std::string& filepath) const;
     bool importSettings(const std::string& filepath);
-    
-    // Font utilities
-    float getSystemFontSize() const;
 
 public:
     VerseFinderApp();

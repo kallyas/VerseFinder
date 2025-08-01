@@ -201,6 +201,12 @@ add_executable(VerseFinder
     src/core/SearchAnalytics.cpp
     src/core/TopicManager.cpp
     src/ui/VerseFinderApp.cpp
+    src/ui/components/SearchComponent.cpp
+    src/ui/components/TranslationSelector.cpp
+    src/ui/settings/ThemeManager.cpp
+    src/ui/system/FontManager.cpp
+    src/ui/system/WindowManager.cpp
+    src/ui/modals/SettingsModal.cpp
     src/integrations/IntegrationManager.cpp
     src/integrations/PlanningCenterProvider.cpp
     src/service/ServicePlan.cpp

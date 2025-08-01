@@ -26,6 +26,12 @@
 #include "../integrations/IntegrationManager.h"
 #include "../service/ServicePlan.h"
 #include "../api/ApiServer.h"
+#include "components/SearchComponent.h"
+#include "components/TranslationSelector.h"
+#include "settings/ThemeManager.h"
+#include "system/FontManager.h"
+#include "system/WindowManager.h"
+#include "modals/SettingsModal.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -114,6 +120,14 @@ private:
     float splash_progress = 0.0f;
     std::string splash_status = "Initializing...";
     
+    // UI Components
+    std::unique_ptr<SearchComponent> search_component;
+    std::unique_ptr<TranslationSelector> translation_selector;
+    std::unique_ptr<ThemeManager> theme_manager;
+    std::unique_ptr<FontManager> font_manager;
+    std::unique_ptr<WindowManager> window_manager;
+    std::unique_ptr<SettingsModal> settings_modal;
+    
     // UI state
     bool show_verse_modal = false;
     bool show_settings_window = false;
@@ -122,13 +136,6 @@ private:
     bool show_performance_window = false;
     bool show_memory_window = false;
     bool show_integrations_window = false;
-    
-    // UI styling
-    void setupImGuiStyle();
-    void applyDarkTheme();
-    void applyLightTheme();
-    void applyBlueTheme();
-    void applyGreenTheme();
     
     // API server setup
     void setupApiRoutes();

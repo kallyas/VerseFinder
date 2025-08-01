@@ -66,6 +66,11 @@ void VerseFinder::loadBibleInternal(const std::string& filename) {
     // Build auto-complete index after loading data
     auto_complete.buildIndex(verses);
     
+    // Build topic index after loading data
+    if (topic_analysis_enabled) {
+        topic_manager.buildTopicIndex(verses);
+    }
+    
     data_loaded = true;
     std::cout << "Loaded " << available_translations.size() << " translations." << std::endl;
 }
@@ -539,6 +544,11 @@ void VerseFinder::loadTranslationsFromDirectory(const std::string& dir_path) {
     
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    
+    // Build topic index after loading all translations
+    if (topic_analysis_enabled) {
+        topic_manager.buildTopicIndex(verses);
+    }
     
     data_loaded = true;
     std::cout << "Loaded " << available_translations.size() << " translations in " 
@@ -1485,4 +1495,63 @@ void VerseFinder::recordVerseSelection(const std::string& query, const std::stri
         search_analytics.recordVerseSelection(query, verseKey);
         search_analytics.recordVerseAccess(verseKey);
     }
+}
+
+// Topic management methods
+void VerseFinder::enableTopicAnalysis(bool enable) {
+    topic_analysis_enabled = enable;
+}
+
+bool VerseFinder::isTopicAnalysisEnabled() const {
+    return topic_analysis_enabled;
+}
+
+std::vector<std::string> VerseFinder::getVersesByTopic(const std::string& topic, int maxResults) const {
+    if (!topic_analysis_enabled) return {};
+    
+    return topic_manager.getVersesByTopic(topic, maxResults);
+}
+
+std::vector<std::string> VerseFinder::getRelatedTopics(const std::string& topic, int maxResults) const {
+    if (!topic_analysis_enabled) return {};
+    
+    return topic_manager.getRelatedTopics(topic, maxResults);
+}
+
+std::vector<TopicSuggestion> VerseFinder::generateTopicSuggestions(const std::string& query) const {
+    if (!topic_analysis_enabled) return {};
+    
+    return topic_manager.generateTopicSuggestions(query);
+}
+
+std::vector<std::string> VerseFinder::getPopularTopics(int count) const {
+    if (!topic_analysis_enabled) return {};
+    
+    return topic_manager.getPopularTopics(count);
+}
+
+std::vector<std::string> VerseFinder::getSeasonalTopicSuggestions() const {
+    if (!topic_analysis_enabled) return {};
+    
+    return topic_manager.getSeasonalSuggestions();
+}
+
+std::string VerseFinder::getTopicalVerseOfTheDay(const std::string& topic) const {
+    if (!topic_analysis_enabled) return "John 3:16";
+    
+    if (topic.empty()) {
+        return topic_manager.getVerseOfTheDay("seasonal");
+    } else {
+        return topic_manager.getTopicalVerseOfTheDay(topic);
+    }
+}
+
+void VerseFinder::addCustomTopic(const std::string& topicName, const std::vector<std::string>& keywords) {
+    if (topic_analysis_enabled) {
+        topic_manager.addCustomTopic(topicName, keywords);
+    }
+}
+
+TopicManager* VerseFinder::getTopicManager() {
+    return &topic_manager;
 }

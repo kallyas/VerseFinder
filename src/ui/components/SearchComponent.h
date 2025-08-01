@@ -35,6 +35,11 @@ public:
     void setIncrementalSearchEnabled(bool enabled) { incremental_search_enabled = enabled; }
     bool isIncrementalSearchEnabled() const { return incremental_search_enabled; }
     
+    // Advanced search features
+    void showTopicSuggestions();
+    void showRelatedQueries(const std::string& query);
+    void showSeasonalSuggestions();
+    
     // Callback setters
     void setOnResultSelected(std::function<void(const std::string&)> callback) { 
         on_result_selected = callback; 
@@ -56,6 +61,12 @@ private:
     bool fuzzy_search_enabled;
     bool incremental_search_enabled;
     
+    // Advanced search features
+    std::vector<std::string> topic_suggestions;
+    std::vector<std::string> related_queries;
+    std::vector<std::string> seasonal_suggestions;
+    bool show_advanced_suggestions;
+    
     // UI state
     bool search_input_focused;
     std::string last_search_input;
@@ -67,6 +78,7 @@ private:
     void renderSearchButton();
     void renderSearchHistory();
     void renderAutoComplete();
+    void renderAdvancedSuggestions();
     void renderSearchHints();
     void renderFuzzySearchExamples();
     

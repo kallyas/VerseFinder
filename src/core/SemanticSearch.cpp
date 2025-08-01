@@ -507,3 +507,62 @@ std::string SemanticSearch::exportSemanticConfig() const {
     
     return config.dump(2);
 }
+
+// Advanced pattern matching methods
+std::vector<std::string> SemanticSearch::searchWithWildcards(const std::string& pattern) const {
+    std::vector<std::string> results;
+    
+    // This is a basic wildcard implementation
+    // In a full implementation, this would search through all verses
+    // For now, return empty as this would need access to verse data
+    
+    return results;
+}
+
+std::vector<std::string> SemanticSearch::searchWithRegex(const std::string& regexPattern) const {
+    std::vector<std::string> results;
+    
+    try {
+        std::regex regex(regexPattern, std::regex_constants::icase);
+        
+        // This would search through all verses with the regex
+        // For now, return empty as this would need access to verse data
+        
+    } catch (const std::regex_error& e) {
+        // Invalid regex pattern
+    }
+    
+    return results;
+}
+
+bool SemanticSearch::matchesWildcardPattern(const std::string& text, const std::string& pattern) const {
+    // Simple wildcard matching: * matches any sequence, ? matches any single character
+    std::string regexPattern = pattern;
+    
+    // Escape special regex characters except * and ?
+    std::string escaped = "";
+    for (char c : regexPattern) {
+        switch (c) {
+            case '.': case '^': case '$': case '+': case '{': case '}':
+            case '[': case ']': case '(': case ')': case '|': case '\\':
+                escaped += "\\";
+                escaped += c;
+                break;
+            case '*':
+                escaped += ".*";
+                break;
+            case '?':
+                escaped += ".";
+                break;
+            default:
+                escaped += c;
+        }
+    }
+    
+    try {
+        std::regex wildcardRegex(escaped, std::regex_constants::icase);
+        return std::regex_search(text, wildcardRegex);
+    } catch (const std::regex_error& e) {
+        return false;
+    }
+}

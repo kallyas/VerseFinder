@@ -196,6 +196,7 @@ add_executable(VerseFinder
     src/core/SemanticSearch.cpp
     src/core/CrossReferenceSystem.cpp
     src/core/SearchAnalytics.cpp
+    src/core/TopicManager.cpp
     src/ui/VerseFinderApp.cpp
     ${IMGUI_SOURCES}
 )
@@ -308,6 +309,7 @@ add_executable(performance_test
     src/core/SemanticSearch.cpp
     src/core/CrossReferenceSystem.cpp
     src/core/SearchAnalytics.cpp
+    src/core/TopicManager.cpp
 )
 
 # Link libraries for performance test

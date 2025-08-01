@@ -191,34 +191,36 @@ bool VerseFinderApp::init() {
     // Load fonts with symbol support using system font size
     float systemFontSize = getSystemFontSize();
     
-    // Use compile-time defined font paths from CMake
+    // Try to load a custom font with fallback to default
+    std::vector<std::string> font_paths;
+    
+    // Use compile-time defined font path from CMake
     #ifdef GENTIUM_FONT_PATH
-        io.Fonts->AddFontFromFileTTF(GENTIUM_FONT_PATH, systemFontSize);
-    #else
-        // Fallback to runtime path resolution
-        io.Fonts->AddFontFromFileTTF((getExecutablePath() + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf").c_str(), systemFontSize);
+        font_paths.push_back(GENTIUM_FONT_PATH);
     #endif
     
-    // Load Material Design Icons font
-    ImFontConfig icon_config;
-    icon_config.MergeMode = true;
-    icon_config.PixelSnapH = true;
-    icon_config.GlyphMinAdvanceX = systemFontSize;
-    static const ImWchar icon_ranges[] = { 0xE000, 0xF8FF, 0 };
+    // Runtime path resolution
+    std::string exe_dir = getExecutablePath();
+    font_paths.push_back(exe_dir + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf");
+    font_paths.push_back(exe_dir + "/fonts/arial/ARIAL.TTF");
     
-    #ifdef MATERIAL_ICONS_FONT_PATH
-        icon_font = io.Fonts->AddFontFromFileTTF(MATERIAL_ICONS_FONT_PATH, systemFontSize, &icon_config, icon_ranges);
-        if (!icon_font) {
-            std::cout << "Warning: Failed to load Material Icons font from: " << MATERIAL_ICONS_FONT_PATH << std::endl;
+    // Try to load fonts in order of preference
+    ImFont* loaded_font = nullptr;
+    for (const auto& path : font_paths) {
+        if (std::filesystem::exists(path)) {
+            loaded_font = io.Fonts->AddFontFromFileTTF(path.c_str(), systemFontSize);
+            if (loaded_font) {
+                std::cout << "Loaded font: " << path << std::endl;
+                break;
+            }
         }
-    #else
-        // Fallback to runtime path resolution
-        std::string icon_font_path = getExecutablePath() + "/fonts/MaterialIcons-Regular.ttf";
-        icon_font = io.Fonts->AddFontFromFileTTF(icon_font_path.c_str(), systemFontSize, &icon_config, icon_ranges);
-        if (!icon_font) {
-            std::cout << "Warning: Failed to load Material Icons font from: " << icon_font_path << std::endl;
-        }
-    #endif
+    }
+    
+    // If no custom font loaded, use default
+    if (!loaded_font) {
+        std::cout << "Using default ImGui font" << std::endl;
+        io.Fonts->AddFontDefault();
+    }
     
     // Add Unicode ranges for symbol/emoji support (limited to 16-bit ranges)
     static const ImWchar ranges[] = {
@@ -576,8 +578,8 @@ void VerseFinderApp::run() {
         
         // Create menu bar
         if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu(ICON_MD_FOLDER " File")) {
-                if (ImGui::MenuItem(ICON_MD_SETTINGS " Settings", "Ctrl+,")) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Settings", "Ctrl+,")) {
                     show_settings_window = true;
                 }
                 ImGui::Separator();
@@ -586,25 +588,25 @@ void VerseFinderApp::run() {
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu(ICON_MD_EDIT " Edit")) {
-                if (ImGui::MenuItem(ICON_MD_CLEAR " Clear Search", "Ctrl+K")) {
+            if (ImGui::BeginMenu("Edit")) {
+                if (ImGui::MenuItem("Clear Search", "Ctrl+K")) {
                     clearSearch();
                 }
-                if (ImGui::MenuItem(ICON_MD_COPY " Copy Verse", "Ctrl+C", false, !selected_verse_text.empty())) {
+                if (ImGui::MenuItem("Copy Verse", "Ctrl+C", false, !selected_verse_text.empty())) {
                     copyToClipboard(selected_verse_text);
                 }
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu(ICON_MD_VISIBILITY " View")) {
+            if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Auto Search", nullptr, &auto_search);
                 ImGui::MenuItem("Performance Stats", nullptr, &show_performance_stats);
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu(ICON_MD_HELP " Help")) {
-                if (ImGui::MenuItem(ICON_MD_HELP " Help", "F1")) {
+            if (ImGui::BeginMenu("Help")) {
+                if (ImGui::MenuItem("Help", "F1")) {
                     show_help_window = true;
                 }
-                if (ImGui::MenuItem(ICON_MD_INFO " About")) {
+                if (ImGui::MenuItem("About")) {
                     show_about_window = true;
                 }
                 ImGui::EndMenu();
@@ -688,7 +690,7 @@ void VerseFinderApp::renderMainWindow() {
 }
 
 void VerseFinderApp::renderSearchArea() {
-    ImGui::Text(ICON_MD_SEARCH " Bible Search");
+    ImGui::Text("Bible Search");
     ImGui::Spacing();
     
     // Search input
@@ -700,7 +702,7 @@ void VerseFinderApp::renderSearchArea() {
     // Search history dropdown (if history exists)
     if (!userSettings.content.searchHistory.empty()) {
         ImGui::Spacing();
-        if (ImGui::BeginCombo(ICON_MD_HISTORY " Recent Searches", nullptr)) {
+        if (ImGui::BeginCombo("Recent Searches", nullptr)) {
             for (const auto& historical_search : userSettings.content.searchHistory) {
                 if (ImGui::Selectable(historical_search.c_str())) {
                     strncpy(search_input, historical_search.c_str(), sizeof(search_input) - 1);
@@ -720,11 +722,11 @@ void VerseFinderApp::renderSearchArea() {
     
     // Search buttons and controls
     ImGui::Spacing();
-    if (ImGui::Button(ICON_MD_SEARCH " Search", ImVec2(100, 0))) {
+    if (ImGui::Button("Search", ImVec2(100, 0))) {
         performSearch();
     }
     ImGui::SameLine();
-    if (ImGui::Button(ICON_MD_CLEAR " Clear", ImVec2(80, 0))) {
+    if (ImGui::Button("Clear", ImVec2(80, 0))) {
         clearSearch();
     }
     ImGui::SameLine();
@@ -750,14 +752,14 @@ void VerseFinderApp::renderSearchArea() {
         // Book name suggestions
         if (!book_suggestions.empty()) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "📖 Did you mean:");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Did you mean:");
             for (size_t i = 0; i < std::min(book_suggestions.size(), size_t(3)); ++i) {
                 const auto& suggestion = book_suggestions[i];
                 std::string confidence_text = "";
                 if (suggestion.matchType == "fuzzy") {
                     confidence_text = " (~" + std::to_string(static_cast<int>(suggestion.confidence * 100)) + "%)";
                 } else if (suggestion.matchType == "phonetic") {
-                    confidence_text = " (♪)";
+                    confidence_text = " (phonetic)";
                 } else if (suggestion.matchType == "partial") {
                     confidence_text = " (...)";
                 }
@@ -776,7 +778,7 @@ void VerseFinderApp::renderSearchArea() {
         // Query keyword suggestions
         if (!query_suggestions.empty()) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "💭 Suggestions:");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Suggestions:");
             for (size_t i = 0; i < std::min(query_suggestions.size(), size_t(3)); ++i) {
                 if (ImGui::SmallButton(query_suggestions[i].c_str())) {
                     strncpy(search_input, query_suggestions[i].c_str(), sizeof(search_input) - 1);
@@ -793,7 +795,7 @@ void VerseFinderApp::renderSearchArea() {
     // Search hints
     if (strlen(search_input) == 0) {
         ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "💡 Examples:");
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Examples:");
         ImGui::BulletText("John 3:16 - Find specific verse");
         ImGui::BulletText("love - Find verses with keyword");
         ImGui::BulletText("faith hope love - Find multiple keywords");
@@ -801,7 +803,7 @@ void VerseFinderApp::renderSearchArea() {
         
         if (fuzzy_search_enabled) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), ICON_MD_SEARCH " Fuzzy Search Examples:");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Fuzzy Search Examples:");
             ImGui::BulletText("Jhn 3:16 - Corrects typos in book names");
             ImGui::BulletText("luv - Finds 'love' with phonetic matching");
             ImGui::BulletText("Gen - Suggests 'Genesis' from partial match");
@@ -812,7 +814,7 @@ void VerseFinderApp::renderSearchArea() {
 
 void VerseFinderApp::renderSearchResults() {
     if (!bible.isReady()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ICON_MD_REFRESH " Loading Bible data...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading Bible data...");
         return;
     }
     
@@ -821,14 +823,14 @@ void VerseFinderApp::renderSearchResults() {
             ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No verses found");
             ImGui::Text("Try different keywords or check the reference");
         } else {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "📖 Enter search terms above");
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enter search terms above");
         }
         return;
     }
     
     // Show different headers based on search type
     if (is_viewing_chapter) {
-        ImGui::Text("📖 %s Chapter %d (%d verses)", 
+        ImGui::Text("%s Chapter %d (%d verses)", 
                    current_chapter_book.c_str(), current_chapter_number, (int)search_results.size());
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Click any verse to jump to it");
     } else {
@@ -937,7 +939,7 @@ void VerseFinderApp::renderSearchResults() {
         if (ImGui::BeginPopupContextItem(("context_" + std::to_string(i)).c_str())) {
             bool isFavorite = userSettings.isFavoriteVerse(result);
             if (isFavorite) {
-                if (ImGui::MenuItem("💔 Remove from Favorites")) {
+                if (ImGui::MenuItem("Remove from Favorites")) {
                     userSettings.removeFavoriteVerse(result);
                 }
             } else {
@@ -945,7 +947,7 @@ void VerseFinderApp::renderSearchResults() {
                     userSettings.addFavoriteVerse(result);
                 }
             }
-            if (ImGui::MenuItem(ICON_MD_COPY " Copy to Clipboard")) {
+            if (ImGui::MenuItem("Copy to Clipboard")) {
                 copyToClipboard(result);
             }
             if (ImGui::MenuItem("View Full Verse")) {
@@ -975,7 +977,7 @@ void VerseFinderApp::renderTranslationSelector() {
     ImGui::Text("📚 Translation");
     
     if (!bible.isReady()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ICON_MD_REFRESH " Loading...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading...");
         return;
     }
     
@@ -1009,7 +1011,7 @@ void VerseFinderApp::renderTranslationSelector() {
         ImGui::EndCombo();
     }
     
-    if (ImGui::Button("⚙️ Manage Translations", ImVec2(-1, 0))) {
+    if (ImGui::Button("Manage Translations", ImVec2(-1, 0))) {
         show_settings_window = true;
     }
 }
@@ -1017,11 +1019,11 @@ void VerseFinderApp::renderTranslationSelector() {
 void VerseFinderApp::renderStatusBar() {
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text(ICON_MD_INFO " Status");
+    ImGui::Text("Status");
     
     if (bible.isReady()) {
         const auto& translations = bible.getTranslations();
-        ImGui::Text(ICON_MD_CHECK_CIRCLE " Ready - %d translation(s) loaded", (int)translations.size());
+        ImGui::Text("Ready - %d translation(s) loaded", (int)translations.size());
         
         if (!search_results.empty()) {
             ImGui::Text("Found %d verse(s)", (int)search_results.size());
@@ -1032,16 +1034,16 @@ void VerseFinderApp::renderStatusBar() {
         
         // Performance information
         if (last_search_time_ms > 0.0) {
-            ImGui::Text(ICON_MD_REFRESH " Search: %.2f ms", last_search_time_ms);
+            ImGui::Text("Search: %.2f ms", last_search_time_ms);
         }
     } else {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ICON_MD_REFRESH " Loading Bible data...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Loading Bible data...");
     }
     
     // Selected verse preview
     if (!selected_verse_text.empty()) {
         ImGui::Spacing();
-        ImGui::Text(ICON_MD_SEARCH " Selected Verse:");
+        ImGui::Text("Selected Verse:");
         ImGui::Separator();
         
         std::string reference = formatVerseReference(selected_verse_text);
@@ -1053,7 +1055,7 @@ void VerseFinderApp::renderStatusBar() {
         ImGui::Text("%s", verse_text.c_str());
         ImGui::PopTextWrapPos();
         
-        if (ImGui::Button("👁️ View Full", ImVec2(-1, 0))) {
+        if (ImGui::Button("View Full", ImVec2(-1, 0))) {
             show_verse_modal = true;
         }
     }
@@ -1062,7 +1064,7 @@ void VerseFinderApp::renderStatusBar() {
 void VerseFinderApp::renderVerseModal() {
     ImGui::SetNextWindowSize(ImVec2(900, 650), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("📖 Verse Details", &show_verse_modal, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::Begin("Verse Details", &show_verse_modal, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (!selected_verse_text.empty()) {
             std::string reference = formatVerseReference(selected_verse_text);
             std::string verse_text = formatVerseText(selected_verse_text);
@@ -1090,19 +1092,19 @@ void VerseFinderApp::renderVerseModal() {
             ImGui::Spacing();
             
             // Enhanced navigation buttons
-            if (ImGui::Button("⬅️⬅️ -10", ImVec2(70, 35))) {
+            if (ImGui::Button("-10", ImVec2(70, 35))) {
                 navigateToVerse(-10);
             }
             ImGui::SameLine();
-            if (ImGui::Button("⬅️ -1", ImVec2(60, 35))) {
+            if (ImGui::Button("-1", ImVec2(60, 35))) {
                 navigateToVerse(-1);
             }
             ImGui::SameLine();
-            if (ImGui::Button("➡️ +1", ImVec2(60, 35))) {
+            if (ImGui::Button("+1", ImVec2(60, 35))) {
                 navigateToVerse(1);
             }
             ImGui::SameLine();
-            if (ImGui::Button("➡️➡️ +10", ImVec2(70, 35))) {
+            if (ImGui::Button("+10", ImVec2(70, 35))) {
                 navigateToVerse(10);
             }
             ImGui::SameLine();
@@ -1110,7 +1112,7 @@ void VerseFinderApp::renderVerseModal() {
             ImGui::SameLine();
             
             // Action buttons
-            if (ImGui::Button(ICON_MD_COPY " Copy", ImVec2(100, 35))) {
+            if (ImGui::Button("Copy", ImVec2(100, 35))) {
                 copyToClipboard(selected_verse_text);
             }
             ImGui::SameLine();
@@ -1125,7 +1127,7 @@ void VerseFinderApp::renderVerseModal() {
 void VerseFinderApp::renderSettingsWindow() {
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin("⚙️ Settings", &show_settings_window)) {
+    if (ImGui::Begin("Settings", &show_settings_window)) {
         if (ImGui::BeginTabBar("SettingsTabs")) {
             if (ImGui::BeginTabItem("📚 Translations")) {
                 ImGui::Text("Manage Bible translations for VerseFinder");
@@ -1252,7 +1254,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Window Settings
-                ImGui::Text("🖼️ Window Settings");
+                ImGui::Text("Window Settings");
                 ImGui::Spacing();
                 
                 bool rememberWindow = userSettings.display.rememberWindowState;
@@ -1278,7 +1280,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // General Search Settings
-                ImGui::Text("⚙️ General Search Settings");
+                ImGui::Text("General Search Settings");
                 ImGui::Spacing();
                 
                 // Default translation
@@ -1346,7 +1348,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::Separator();
                 
                 // Fuzzy search settings
-                ImGui::Text(ICON_MD_SEARCH " Fuzzy Search Settings");
+                ImGui::Text("Fuzzy Search Settings");
                 ImGui::Spacing();
                 
                 bool fuzzyEnabled = userSettings.search.fuzzySearchEnabled;
@@ -1407,7 +1409,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     ImGui::Spacing();
                     ImGui::Separator();
-                    ImGui::Text("💡 Fuzzy Search Examples:");
+                    ImGui::Text("Fuzzy Search Examples:");
                     ImGui::BulletText("'Jhn 3:16' → 'John 3:16' (typo correction)");
                     ImGui::BulletText("'luv' → verses about 'love' (phonetic matching)");
                     ImGui::BulletText("'Gen' → 'Genesis' (partial matching)");
@@ -1678,7 +1680,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     }
                     
                     ImGui::Separator();
-                    ImGui::Text("⚙️ Advanced Options");
+                    ImGui::Text("Advanced Options");
                     ImGui::Spacing();
                     
                     // OBS optimization
@@ -1714,7 +1716,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImGui::EndTabItem();
             }
             
-            if (ImGui::BeginTabItem(ICON_MD_KEYBOARD " Shortcuts")) {
+            if (ImGui::BeginTabItem("Shortcuts")) {
                 ImGui::Text("Keyboard shortcuts for VerseFinder");
                 ImGui::Separator();
                 
@@ -1793,8 +1795,8 @@ void VerseFinderApp::renderSettingsWindow() {
 void VerseFinderApp::renderAboutWindow() {
     ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
     
-    if (ImGui::Begin(ICON_MD_INFO " About VerseFinder", &show_about_window, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text(ICON_MD_SEARCH " VerseFinder");
+    if (ImGui::Begin("About VerseFinder", &show_about_window, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("VerseFinder");
         ImGui::Text("Bible Search for Churches");
         ImGui::Separator();
         
@@ -1846,7 +1848,7 @@ void VerseFinderApp::renderHelpWindow() {
         ImGui::BulletText("Switch between translations");
         
         ImGui::Spacing();
-        ImGui::Text(ICON_MD_KEYBOARD " Keyboard Shortcuts");
+        ImGui::Text("Keyboard Shortcuts");
         ImGui::Separator();
         ImGui::BulletText("Ctrl+K - Clear search");
         ImGui::BulletText("Ctrl+C - Copy verse");
@@ -1915,7 +1917,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             }
             
             ImGui::Spacing();
-            ImGui::Text(ICON_MD_INFO " Performance Targets");
+            ImGui::Text("Performance Targets");
             ImGui::Separator();
             
             ImGui::BulletText("Reference Search: < 5ms");
@@ -1924,7 +1926,7 @@ void VerseFinderApp::renderPerformanceWindow() {
             ImGui::BulletText("Cache Hit Rate: > 80%%");
             
             ImGui::Spacing();
-            ImGui::Text("⚙️ Cache Management");
+            ImGui::Text("Cache Management");
             ImGui::Separator();
             
             if (ImGui::Button("Clear Search Cache")) {

@@ -170,6 +170,9 @@ endif()
 include_directories(
     src/core
     src/ui
+    src/integrations
+    src/service
+    src/api
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
     ${OPENGL_LOADER_INCLUDE_DIRS}
@@ -198,6 +201,10 @@ add_executable(VerseFinder
     src/core/SearchAnalytics.cpp
     src/core/TopicManager.cpp
     src/ui/VerseFinderApp.cpp
+    src/integrations/IntegrationManager.cpp
+    src/integrations/PlanningCenterProvider.cpp
+    src/service/ServicePlan.cpp
+    src/api/ApiServer.cpp
     ${IMGUI_SOURCES}
 )
 

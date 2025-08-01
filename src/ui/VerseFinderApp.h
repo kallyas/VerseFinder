@@ -23,6 +23,9 @@
 #include "../core/UserSettings.h"
 #include "../core/MemoryMonitor.h"
 #include "../core/IncrementalSearch.h"
+#include "../integrations/IntegrationManager.h"
+#include "../service/ServicePlan.h"
+#include "../api/ApiServer.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -36,7 +39,8 @@
 enum class UIScreen {
     SPLASH,
     MAIN,
-    SETTINGS
+    SETTINGS,
+    SERVICE_PLANNING
 };
 
 struct AvailableTranslation {
@@ -98,6 +102,15 @@ private:
     // Splash screen state
     UIScreen current_screen = UIScreen::SPLASH;
     std::chrono::steady_clock::time_point app_start_time;
+    
+    // Service planning integration
+    std::unique_ptr<IntegrationManager> integration_manager;
+    std::unique_ptr<ServicePlan> current_service_plan;
+    int selected_integration_type = 0;
+    
+    // API server
+    std::unique_ptr<ApiServer> api_server;
+    bool api_server_enabled = false;
     float splash_progress = 0.0f;
     std::string splash_status = "Initializing...";
     
@@ -108,6 +121,7 @@ private:
     bool show_help_window = false;
     bool show_performance_window = false;
     bool show_memory_window = false;
+    bool show_integrations_window = false;
     
     // UI styling
     void setupImGuiStyle();
@@ -115,6 +129,9 @@ private:
     void applyLightTheme();
     void applyBlueTheme();
     void applyGreenTheme();
+    
+    // API server setup
+    void setupApiRoutes();
     
     // Available translations for download
     std::vector<AvailableTranslation> available_translations = {
@@ -148,6 +165,8 @@ private:
     // Modal and window rendering
     void renderVerseModal();
     void renderSettingsWindow();
+    void renderServicePlanningScreen();
+    void renderIntegrationsWindow();
     void renderAboutWindow();
     void renderHelpWindow();
     void renderPerformanceWindow();

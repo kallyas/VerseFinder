@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <thread>
 #include <future>
+#include <chrono>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <objc/objc-runtime.h>
@@ -22,7 +23,15 @@
 #include <shlobj.h>
 #endif
 
-VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr) {}
+VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr) {
+    // Initialize integration manager and service planning
+    integration_manager = std::make_unique<IntegrationManager>();
+    current_service_plan = std::make_unique<ServicePlan>();
+    
+    // Initialize API server
+    api_server = std::make_unique<ApiServer>();
+    setupApiRoutes();
+}
 
 VerseFinderApp::~VerseFinderApp() {
     cleanup();
@@ -264,6 +273,13 @@ bool VerseFinderApp::init() {
     bible.enableFuzzySearch(fuzzy_search_enabled);
     auto_search = userSettings.search.autoSearch;
     show_performance_stats = userSettings.search.showPerformanceStats;
+    
+    // Start API server if enabled
+    if (api_server_enabled) {
+        if (!api_server->start(8080)) {
+            std::cerr << "Failed to start API server" << std::endl;
+        }
+    }
     
     return true;
 }
@@ -550,6 +566,141 @@ void VerseFinderApp::applyGreenTheme() {
     colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 }
 
+void VerseFinderApp::setupApiRoutes() {
+    // Enable CORS for web browser access
+    api_server->enableCors("*");
+    
+    // Search endpoint
+    // Examples: 
+    // /api/search?q=John%203:16 (John 3:16)
+    // /api/search?q=love&translation=ESV 
+    // /api/search?q=psalm+23 (psalm 23)
+    api_server->addRoute(HttpMethod::GET, "/api/search", [this](const ApiRequest& req) -> ApiResponse {
+        auto query_it = req.query_params.find("q");
+        if (query_it == req.query_params.end()) {
+            return errorResponse(400, "Missing query parameter 'q'");
+        }
+        
+        std::string query = query_it->second;
+        
+        // Get the first available translation as default
+        std::string translation;
+        if (!bible.getTranslations().empty()) {
+            translation = bible.getTranslations()[0].name;
+        } else {
+            return errorResponse(503, "No translations loaded");
+        }
+        
+        // Check if user specified a translation parameter
+        auto trans_it = req.query_params.find("translation");
+        if (trans_it != req.query_params.end()) {
+            std::string requested_translation = trans_it->second;
+            
+            // Look for exact match by name or abbreviation
+            bool found = false;
+            for (const auto& trans : bible.getTranslations()) {
+                if (trans.name == requested_translation || trans.abbreviation == requested_translation) {
+                    translation = trans.name; // Always use the full name internally
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                // Build list of available translations for error message
+                std::string available_list = "";
+                const auto& translations = bible.getTranslations();
+                for (size_t i = 0; i < translations.size(); ++i) {
+                    if (i > 0) available_list += ", ";
+                    available_list += translations[i].name + " (" + translations[i].abbreviation + ")";
+                }
+                return errorResponse(400, "Translation '" + requested_translation + "' not found. Available: " + available_list);
+            }
+        }
+        
+        // Log the query to show URL decoding worked
+        std::cout << "[API] Search query: '" << query << "' with translation: '" << translation << "'" << std::endl;
+        
+        if (!bible.isReady()) {
+            return errorResponse(503, "Bible data not ready");
+        }
+        
+        // Try reference search first
+        std::string result = bible.searchByReference(query, translation);
+        if (result != "Verse not found." && result != "Bible is loading...") {
+            std::string json = std::string("{\"type\": \"reference\", \"query\": \"") + query + 
+                              std::string("\", \"translation\": \"") + translation + 
+                              std::string("\", \"result\": \"") + result + std::string("\"}");
+            return jsonResponse(json);
+        }
+        
+        // Try keyword search
+        auto keyword_results = bible.searchByKeywords(query, translation);
+        if (!keyword_results.empty()) {
+            std::string json = std::string("{\"type\": \"keyword\", \"query\": \"") + query + 
+                              std::string("\", \"translation\": \"") + translation + 
+                              std::string("\", \"results\": [");
+            for (size_t i = 0; i < keyword_results.size(); ++i) {
+                if (i > 0) json += ", ";
+                json += "\"" + keyword_results[i] + "\"";
+            }
+            json += "]}";
+            return jsonResponse(json);
+        }
+        
+        // If no results found, provide available translations info
+        std::string available_translations = "";
+        const auto& translations = bible.getTranslations();
+        for (size_t i = 0; i < translations.size(); ++i) {
+            if (i > 0) available_translations += ", ";
+            available_translations += translations[i].name;
+        }
+        
+        std::string error_msg = "No results found";
+        if (!available_translations.empty()) {
+            error_msg += ". Available translations: " + available_translations;
+        }
+        
+        return errorResponse(404, error_msg);
+    });
+    
+    // Translations endpoint
+    api_server->addRoute(HttpMethod::GET, "/api/translations", [this](const ApiRequest&) -> ApiResponse {
+        if (!bible.isReady()) {
+            return errorResponse(503, "Bible data not ready");
+        }
+        
+        const auto& translations = bible.getTranslations();
+        std::string json = "{\"translations\": [";
+        bool first = true;
+        for (const auto& trans : translations) {
+            if (!first) json += ", ";
+            json += "{\"name\": \"" + trans.name + "\", \"abbreviation\": \"" + trans.abbreviation + "\"}";
+            first = false;
+        }
+        json += "]}";
+        return jsonResponse(json);
+    });
+    
+    // Health check endpoint
+    api_server->addRoute(HttpMethod::GET, "/api/health", [this](const ApiRequest& req) -> ApiResponse {
+        std::string json = std::string("{\"status\": \"ok\", \"bible_ready\": ") + 
+                          (bible.isReady() ? "true" : "false") + 
+                          std::string(", \"api_server_running\": true");
+        
+        // Add test parameter to verify URL decoding works
+        auto test_it = req.query_params.find("test");
+        if (test_it != req.query_params.end()) {
+            json = std::string("{\"status\": \"ok\", \"bible_ready\": ") + 
+                   (bible.isReady() ? "true" : "false") + 
+                   std::string(", \"api_server_running\": true, \"test_decoded\": \"") + 
+                   test_it->second + std::string("\"}");
+        }
+        
+        return jsonResponse(json);
+    });
+}
+
 void VerseFinderApp::run() {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -583,6 +734,13 @@ void VerseFinderApp::run() {
                     show_settings_window = true;
                 }
                 ImGui::Separator();
+                if (ImGui::MenuItem("Service Planning", "Ctrl+P")) {
+                    current_screen = UIScreen::SERVICE_PLANNING;
+                }
+                if (ImGui::MenuItem("Integrations", "Ctrl+I")) {
+                    show_integrations_window = true;
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Exit", "Alt+F4")) {
                     glfwSetWindowShouldClose(window, true);
                 }
@@ -614,8 +772,19 @@ void VerseFinderApp::run() {
             ImGui::EndMenuBar();
         }
         
-        // Main content
-        renderMainWindow();
+        // Main content - switch based on current screen
+        switch (current_screen) {
+            case UIScreen::SPLASH:
+                renderSplashScreen();
+                break;
+            case UIScreen::SERVICE_PLANNING:
+                renderServicePlanningScreen();
+                break;
+            case UIScreen::MAIN:
+            default:
+                renderMainWindow();
+                break;
+        }
         
         ImGui::End();
         
@@ -634,6 +803,10 @@ void VerseFinderApp::run() {
         
         if (show_help_window) {
             renderHelpWindow();
+        }
+        
+        if (show_integrations_window) {
+            renderIntegrationsWindow();
         }
         
         if (show_performance_stats) {
@@ -1343,6 +1516,26 @@ void VerseFinderApp::renderSettingsWindow() {
                     show_performance_stats = showPerfStats;
                 }
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Display search timing information");
+                
+                ImGui::Spacing();
+                
+                // API server settings
+                if (ImGui::Checkbox("Enable API Server", &api_server_enabled)) {
+                    if (api_server_enabled) {
+                        if (!api_server->start(8080)) {
+                            std::cerr << "Failed to start API server" << std::endl;
+                            api_server_enabled = false;
+                        }
+                    } else {
+                        api_server->stop();
+                    }
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enable REST API on port 8080 for external access");
+                
+                if (api_server_enabled && api_server->isRunning()) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Running");
+                }
                 
                 ImGui::Spacing();
                 ImGui::Separator();
@@ -3004,6 +3197,11 @@ std::vector<GLFWmonitor*> VerseFinderApp::getAvailableMonitors() const {
 }
 
 void VerseFinderApp::cleanup() {
+    // Stop API server
+    if (api_server && api_server->isRunning()) {
+        api_server->stop();
+    }
+    
     // Cleanup presentation window first
     destroyPresentationWindow();
     
@@ -3015,5 +3213,290 @@ void VerseFinderApp::cleanup() {
         glfwDestroyWindow(window);
         glfwTerminate();
         window = nullptr;
+    }
+}
+
+void VerseFinderApp::renderServicePlanningScreen() {
+    ImGui::Text("Service Planning");
+    ImGui::Separator();
+    
+    // Navigation buttons
+    if (ImGui::Button("Back to Main", ImVec2(120, 0))) {
+        current_screen = UIScreen::MAIN;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Integrations", ImVec2(120, 0))) {
+        show_integrations_window = true;
+    }
+    
+    ImGui::Separator();
+    
+    // Service plan management
+    ImGui::BeginChild("ServicePlanContent", ImVec2(0, -35), true);
+    
+    // Current service plan info
+    if (current_service_plan) {
+        ImGui::Text("Current Plan: %s", current_service_plan->getTitle().c_str());
+        ImGui::Text("Description: %s", current_service_plan->getDescription().c_str());
+        
+        // Service items
+        ImGui::Separator();
+        ImGui::Text("Service Items (%zu)", current_service_plan->getItems().size());
+        
+        for (size_t i = 0; i < current_service_plan->getItems().size(); ++i) {
+            const auto& item = current_service_plan->getItems()[i];
+            
+            ImGui::PushID(static_cast<int>(i));
+            
+            // Item type icon
+            const char* type_icon = "📄";
+            switch (item.type) {
+                case ServiceItemType::SONG: type_icon = "🎵"; break;
+                case ServiceItemType::SCRIPTURE: type_icon = "📖"; break;
+                case ServiceItemType::SERMON: type_icon = "🎤"; break;
+                case ServiceItemType::PRAYER: type_icon = "🙏"; break;
+                case ServiceItemType::ANNOUNCEMENT: type_icon = "📢"; break;
+                case ServiceItemType::OFFERING: type_icon = "💰"; break;
+                case ServiceItemType::BAPTISM: type_icon = "🌊"; break;
+                case ServiceItemType::COMMUNION: type_icon = "🍞"; break;
+                case ServiceItemType::MEDIA: type_icon = "🎬"; break;
+                default: type_icon = "📄"; break;
+            }
+            
+            ImGui::Text("%s %s", type_icon, item.title.c_str());
+            if (!item.content.empty()) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "- %s", item.content.c_str());
+            }
+            
+            // Context menu for items
+            if (ImGui::BeginPopupContextItem(("service_item_context_" + std::to_string(i)).c_str())) {
+                if (ImGui::MenuItem("Edit")) {
+                    // TODO: Implement item editing
+                }
+                if (ImGui::MenuItem("Delete")) {
+                    current_service_plan->removeItem(item.id);
+                }
+                if (ImGui::MenuItem("Move Up") && i > 0) {
+                    // TODO: Implement move up
+                }
+                if (ImGui::MenuItem("Move Down") && i < current_service_plan->getItems().size() - 1) {
+                    // TODO: Implement move down
+                }
+                ImGui::EndPopup();
+            }
+            
+            ImGui::PopID();
+        }
+        
+        // Add new item
+        ImGui::Separator();
+        if (ImGui::Button("Add Scripture Reading", ImVec2(150, 0))) {
+            ServiceItem item;
+            item.type = ServiceItemType::SCRIPTURE;
+            item.title = "Scripture Reading";
+            item.content = "Enter verse reference...";
+            current_service_plan->addItem(item);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Song", ImVec2(100, 0))) {
+            ServiceItem item;
+            item.type = ServiceItemType::SONG;
+            item.title = "Song Title";
+            item.content = "Enter song details...";
+            current_service_plan->addItem(item);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Prayer", ImVec2(100, 0))) {
+            ServiceItem item;
+            item.type = ServiceItemType::PRAYER;
+            item.title = "Prayer";
+            item.content = "Prayer notes...";
+            current_service_plan->addItem(item);
+        }
+    }
+    
+    ImGui::EndChild();
+    
+    // Bottom buttons
+    ImGui::Separator();
+    if (ImGui::Button("New Plan", ImVec2(100, 0))) {
+        current_service_plan = std::make_unique<ServicePlan>("New Service Plan", std::chrono::system_clock::now());
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Template", ImVec2(120, 0))) {
+        // TODO: Implement template loading
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Export", ImVec2(80, 0))) {
+        // TODO: Implement export functionality
+    }
+}
+
+void VerseFinderApp::renderIntegrationsWindow() {
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    
+    if (ImGui::Begin("Church Management Integrations", &show_integrations_window)) {
+        ImGui::Text("Configure integrations with church management and service planning software");
+        ImGui::Separator();
+        
+        if (integration_manager) {
+            auto available_integrations = integration_manager->getAvailableIntegrations();
+            
+            // Integration list
+            ImGui::BeginChild("IntegrationsList", ImVec2(0, -100), true);
+            
+            for (size_t i = 0; i < available_integrations.size(); ++i) {
+                const auto& integration = available_integrations[i];
+                
+                ImGui::PushID(static_cast<int>(i));
+                
+                // Integration status indicator
+                auto status = integration_manager->getStatus(integration.type);
+                const char* status_icon = "⚫";  // Disconnected
+                ImVec4 status_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                
+                switch (status) {
+                    case IntegrationStatus::CONNECTED:
+                        status_icon = "🟢";
+                        status_color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+                        break;
+                    case IntegrationStatus::CONNECTING:
+                        status_icon = "🟡";
+                        status_color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                        break;
+                    case IntegrationStatus::ERROR:
+                        status_icon = "🔴";
+                        status_color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+                        break;
+                    case IntegrationStatus::SYNCING:
+                        status_icon = "🔄";
+                        status_color = ImVec4(0.0f, 0.5f, 1.0f, 1.0f);
+                        break;
+                    default:
+                        break;
+                }
+                
+                ImGui::TextColored(status_color, "%s", status_icon);
+                ImGui::SameLine();
+                ImGui::Text("%s", integration.name.c_str());
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "- %s", integration.description.c_str());
+                
+                // Action buttons
+                ImGui::SameLine(ImGui::GetWindowWidth() - 200);
+                if (status == IntegrationStatus::DISCONNECTED) {
+                    if (ImGui::Button("Connect", ImVec2(80, 0))) {
+                        // TODO: Show configuration dialog
+                        IntegrationConfig config;
+                        config.type = integration.type;
+                        config.name = integration.name;
+                        integration_manager->addIntegration(config);
+                    }
+                } else {
+                    if (ImGui::Button("Configure", ImVec2(80, 0))) {
+                        // TODO: Show configuration dialog
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Disconnect", ImVec2(80, 0))) {
+                        integration_manager->removeIntegration(integration.type);
+                    }
+                }
+                
+                // Show capabilities
+                ImGui::Indent();
+                ImGui::Text("Capabilities:");
+                ImGui::SameLine();
+                if (integration.supports_import) ImGui::Text("Import ");
+                if (integration.supports_export) ImGui::Text("Export ");
+                if (integration.supports_realtime) ImGui::Text("Real-time ");
+                if (integration.requires_oauth) ImGui::Text("OAuth ");
+                ImGui::Unindent();
+                
+                ImGui::Separator();
+                ImGui::PopID();
+            }
+            
+            ImGui::EndChild();
+            
+            // Bottom section
+            ImGui::Separator();
+            ImGui::Text("Quick Actions:");
+            if (ImGui::Button("Test All Connections", ImVec2(150, 0))) {
+                for (const auto& integration : available_integrations) {
+                    if (integration_manager->getStatus(integration.type) != IntegrationStatus::DISCONNECTED) {
+                        integration_manager->testConnection(integration.type);
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Sync Service Plans", ImVec2(150, 0))) {
+                // TODO: Implement service plan synchronization
+            }
+        }
+        
+        // Close button
+        ImGui::Separator();
+        if (ImGui::Button("Close", ImVec2(100, 0))) {
+            show_integrations_window = false;
+        }
+    }
+    ImGui::End();
+}
+
+void VerseFinderApp::renderSplashScreen() {
+    // Center the splash content
+    ImVec2 window_size = ImGui::GetWindowSize();
+    ImVec2 splash_size = ImVec2(400, 200);
+    ImVec2 splash_pos = ImVec2((window_size.x - splash_size.x) * 0.5f, (window_size.y - splash_size.y) * 0.5f);
+    
+    ImGui::SetCursorPos(splash_pos);
+    ImGui::BeginChild("SplashContent", splash_size, false, ImGuiWindowFlags_NoScrollbar);
+    
+    // Logo/Title
+    ImGui::Text("VerseFinder");
+    ImGui::Text("Bible Search for Churches");
+    ImGui::Separator();
+    
+    // Update loading progress based on Bible readiness
+    static bool initialization_started = false;
+    static auto initialization_start_time = std::chrono::steady_clock::now();
+    
+    if (!initialization_started) {
+        initialization_started = true;
+        initialization_start_time = std::chrono::steady_clock::now();
+        splash_status = "Loading Bible data...";
+        splash_progress = 0.1f;
+    }
+    
+    // Check if Bible is ready
+    if (bible.isReady()) {
+        splash_status = "Bible data loaded successfully!";
+        splash_progress = 1.0f;
+    } else {
+        // Show progressive loading based on time elapsed
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - initialization_start_time).count();
+        
+        // Simulate progress over 3 seconds maximum, then check readiness
+        float time_progress = std::min(elapsed / 3000.0f, 0.9f);
+        splash_progress = std::max(splash_progress, time_progress);
+        
+        if (elapsed > 3000) {
+            // After 3 seconds, if still not ready, transition anyway to avoid infinite hang
+            splash_status = "Starting application...";
+            splash_progress = 1.0f;
+        }
+    }
+    
+    // Loading status
+    ImGui::Text("Status: %s", splash_status.c_str());
+    ImGui::ProgressBar(splash_progress, ImVec2(-1, 0));
+    
+    ImGui::EndChild();
+    
+    // Auto-transition to main screen when loading complete
+    if (splash_progress >= 1.0f) {
+        current_screen = UIScreen::MAIN;
     }
 }

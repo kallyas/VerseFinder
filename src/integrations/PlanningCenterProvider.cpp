@@ -63,9 +63,21 @@ bool PlanningCenterProvider::importServicePlan(ServicePlan& plan, const Integrat
             return false;
         }
         
+        // Validate that we have at least one service
+        if (services.size() == 0) {
+            last_error_ = "No services available for import";
+            return false;
+        }
+        
         // For simplicity, import the first service found
         // In a real implementation, this would be user-selected
         std::string service_id = services[0];
+        
+        // Validate service ID
+        if (service_id.empty()) {
+            last_error_ = "Invalid service ID";
+            return false;
+        }
         
         std::string response;
         bool success = makeApiRequest("/service_types/1/plans/" + service_id, "GET", "", response, config);
@@ -75,10 +87,19 @@ bool PlanningCenterProvider::importServicePlan(ServicePlan& plan, const Integrat
             return false;
         }
         
+        // Validate response
+        if (response.empty() || response == "{}") {
+            last_error_ = "Empty response from Planning Center";
+            return false;
+        }
+        
         // Parse the response and populate the service plan
         // This is a simplified implementation
         plan.setTitle("Imported from Planning Center");
         plan.setDescription("Service plan imported from Planning Center Online");
+        
+        // Mark as synced
+        plan.markAsSynced("planning_center");
         
         return true;
         
@@ -99,6 +120,17 @@ std::string PlanningCenterProvider::generateOAuthUrl() const {
 }
 
 bool PlanningCenterProvider::handleOAuthCallback(const std::string& code, IntegrationConfig& config) {
+    // Validate authorization code
+    if (code.empty() || code.length() < 8) {
+        last_error_ = "Invalid authorization code";
+        return false;
+    }
+    
+    if (config.client_secret.empty()) {
+        last_error_ = "Client secret not configured";
+        return false;
+    }
+    
     // Exchange authorization code for access token
     std::ostringstream body;
     body << "grant_type=authorization_code"
@@ -108,7 +140,12 @@ bool PlanningCenterProvider::handleOAuthCallback(const std::string& code, Integr
          << "&code=" << code;
     
     // In a real implementation, this would make an HTTP request to the token endpoint
-    // For now, we'll simulate a successful token exchange
+    // For now, we'll simulate a successful token exchange with basic validation
+    if (code.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::string::npos) {
+        last_error_ = "Authorization code contains invalid characters";
+        return false;
+    }
+    
     config.api_key = "mock_access_token_" + code.substr(0, 8);
     
     return true;
@@ -149,13 +186,49 @@ bool PlanningCenterProvider::exportVerseCollections(const ServicePlan& plan, con
     
     for (const auto& item : scripture_items) {
         std::ostringstream json;
+        std::string item_type = "custom";
+        
+        // Map service item type to PCO item type
+        switch (item.type) {
+            case ServiceItemType::SONG:
+                item_type = "song";
+                break;
+            case ServiceItemType::SCRIPTURE:
+                item_type = "scripture";
+                break;
+            case ServiceItemType::SERMON:
+                item_type = "sermon";
+                break;
+            case ServiceItemType::PRAYER:
+                item_type = "prayer";
+                break;
+            case ServiceItemType::ANNOUNCEMENT:
+                item_type = "announcement";
+                break;
+            case ServiceItemType::OFFERING:
+                item_type = "offering";
+                break;
+            case ServiceItemType::COMMUNION:
+                item_type = "communion";
+                break;
+            case ServiceItemType::BAPTISM:
+                item_type = "baptism";
+                break;
+            case ServiceItemType::MEDIA:
+                item_type = "media";
+                break;
+            default:
+                item_type = "custom";
+                break;
+        }
+        
         json << "{"
              << "\"data\": {"
              << "\"type\": \"Item\","
              << "\"attributes\": {"
              << "\"title\": \"" << item.title << "\","
              << "\"description\": \"" << item.content << "\","
-             << "\"item_type\": \"song\""
+             << "\"item_type\": \"" << item_type << "\""
              << "}"
              << "}"
              << "}";
@@ -185,6 +258,10 @@ std::vector<std::string> PlanningCenterProvider::getAvailableServices(const Inte
 bool PlanningCenterProvider::makeApiRequest(const std::string& endpoint, const std::string& method,
                                            const std::string& body, std::string& response,
                                            const IntegrationConfig& config) {
+    // Suppress unused parameter warnings for mock implementation
+    (void)method;
+    (void)body;
+    
     // In a real implementation, this would make actual HTTP requests
     // For now, we'll simulate API responses
     
@@ -218,24 +295,34 @@ std::string PlanningCenterProvider::buildAuthHeader(const IntegrationConfig& con
 }
 
 bool PlanningCenterProvider::refreshAccessToken(IntegrationConfig& config) {
+    // Suppress unused parameter warning for mock implementation
+    (void)config;
+    
     // Implementation for refreshing OAuth tokens
     return true;
 }
 
 std::vector<PlanningCenterProvider::PCOService> PlanningCenterProvider::parseServicesResponse(const std::string& response) {
+    // Suppress unused parameter warning for mock implementation
+    (void)response;
+    
     std::vector<PCOService> services;
     // Parse JSON response and extract service information
     return services;
 }
 
 std::vector<PlanningCenterProvider::PCOItem> PlanningCenterProvider::parseItemsResponse(const std::string& response) {
+    // Suppress unused parameter warning for mock implementation
+    (void)response;
+    
     std::vector<PCOItem> items;
     // Parse JSON response and extract item information
     return items;
 }
 
-ServicePlan PlanningCenterProvider::convertPCOToServicePlan(const PCOService& service, const std::vector<PCOItem>& items) {
-    ServicePlan plan(service.name, service.service_time);
+void PlanningCenterProvider::convertPCOToServicePlan(const PCOService& service, const std::vector<PCOItem>& items, ServicePlan& plan) {
+    plan.setTitle(service.name);
+    plan.setServiceTime(service.service_time);
     plan.setDescription(service.series_title + " - " + service.plan_title);
     
     for (const auto& pco_item : items) {
@@ -250,14 +337,28 @@ ServicePlan PlanningCenterProvider::convertPCOToServicePlan(const PCOService& se
             item.type = ServiceItemType::SONG;
         } else if (pco_item.category == "header") {
             item.type = ServiceItemType::CUSTOM;
+        } else if (pco_item.category == "scripture" || pco_item.category == "reading") {
+            item.type = ServiceItemType::SCRIPTURE;
+        } else if (pco_item.category == "sermon" || pco_item.category == "message") {
+            item.type = ServiceItemType::SERMON;
+        } else if (pco_item.category == "prayer") {
+            item.type = ServiceItemType::PRAYER;
+        } else if (pco_item.category == "announcement") {
+            item.type = ServiceItemType::ANNOUNCEMENT;
+        } else if (pco_item.category == "offering") {
+            item.type = ServiceItemType::OFFERING;
+        } else if (pco_item.category == "communion") {
+            item.type = ServiceItemType::COMMUNION;
+        } else if (pco_item.category == "baptism") {
+            item.type = ServiceItemType::BAPTISM;
+        } else if (pco_item.category == "media" || pco_item.category == "video") {
+            item.type = ServiceItemType::MEDIA;
         } else {
             item.type = ServiceItemType::CUSTOM;
         }
         
         plan.addItem(item);
     }
-    
-    return plan;
 }
 
 std::string PlanningCenterProvider::convertServicePlanToPCO(const ServicePlan& plan) {

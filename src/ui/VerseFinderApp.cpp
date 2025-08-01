@@ -3098,7 +3098,7 @@ void VerseFinderApp::renderServicePlanningScreen() {
             }
             
             // Context menu for items
-            if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::BeginPopupContextItem(("service_item_context_" + std::to_string(i)).c_str())) {
                 if (ImGui::MenuItem("Edit")) {
                     // TODO: Implement item editing
                 }

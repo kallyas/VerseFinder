@@ -6,6 +6,7 @@
 #include <memory>
 #include <unordered_map>
 #include <functional>
+#include <mutex>
 
 // Forward declarations
 class ServicePlan;
@@ -95,6 +96,9 @@ private:
     std::unordered_map<IntegrationType, IntegrationStatus> statuses_;
     std::unordered_map<IntegrationType, std::string> errors_;
     std::function<void(IntegrationType, IntegrationStatus)> status_callback_;
+    
+    // Thread safety
+    mutable std::mutex mutex_;
     
     void initializeProviders();
     void updateStatus(IntegrationType type, IntegrationStatus status);

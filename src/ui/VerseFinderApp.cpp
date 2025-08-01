@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <thread>
 #include <future>
+#include <chrono>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <objc/objc-runtime.h>
@@ -26,6 +27,10 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     // Initialize integration manager and service planning
     integration_manager = std::make_unique<IntegrationManager>();
     current_service_plan = std::make_unique<ServicePlan>();
+    
+    // Initialize API server
+    api_server = std::make_unique<ApiServer>();
+    setupApiRoutes();
 }
 
 VerseFinderApp::~VerseFinderApp() {
@@ -268,6 +273,13 @@ bool VerseFinderApp::init() {
     bible.enableFuzzySearch(fuzzy_search_enabled);
     auto_search = userSettings.search.autoSearch;
     show_performance_stats = userSettings.search.showPerformanceStats;
+    
+    // Start API server if enabled
+    if (api_server_enabled) {
+        if (!api_server->start(8080)) {
+            std::cerr << "Failed to start API server" << std::endl;
+        }
+    }
     
     return true;
 }
@@ -552,6 +564,141 @@ void VerseFinderApp::applyGreenTheme() {
     colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
     colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
     colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+}
+
+void VerseFinderApp::setupApiRoutes() {
+    // Enable CORS for web browser access
+    api_server->enableCors("*");
+    
+    // Search endpoint
+    // Examples: 
+    // /api/search?q=John%203:16 (John 3:16)
+    // /api/search?q=love&translation=ESV 
+    // /api/search?q=psalm+23 (psalm 23)
+    api_server->addRoute(HttpMethod::GET, "/api/search", [this](const ApiRequest& req) -> ApiResponse {
+        auto query_it = req.query_params.find("q");
+        if (query_it == req.query_params.end()) {
+            return errorResponse(400, "Missing query parameter 'q'");
+        }
+        
+        std::string query = query_it->second;
+        
+        // Get the first available translation as default
+        std::string translation;
+        if (!bible.getTranslations().empty()) {
+            translation = bible.getTranslations()[0].name;
+        } else {
+            return errorResponse(503, "No translations loaded");
+        }
+        
+        // Check if user specified a translation parameter
+        auto trans_it = req.query_params.find("translation");
+        if (trans_it != req.query_params.end()) {
+            std::string requested_translation = trans_it->second;
+            
+            // Look for exact match by name or abbreviation
+            bool found = false;
+            for (const auto& trans : bible.getTranslations()) {
+                if (trans.name == requested_translation || trans.abbreviation == requested_translation) {
+                    translation = trans.name; // Always use the full name internally
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                // Build list of available translations for error message
+                std::string available_list = "";
+                const auto& translations = bible.getTranslations();
+                for (size_t i = 0; i < translations.size(); ++i) {
+                    if (i > 0) available_list += ", ";
+                    available_list += translations[i].name + " (" + translations[i].abbreviation + ")";
+                }
+                return errorResponse(400, "Translation '" + requested_translation + "' not found. Available: " + available_list);
+            }
+        }
+        
+        // Log the query to show URL decoding worked
+        std::cout << "[API] Search query: '" << query << "' with translation: '" << translation << "'" << std::endl;
+        
+        if (!bible.isReady()) {
+            return errorResponse(503, "Bible data not ready");
+        }
+        
+        // Try reference search first
+        std::string result = bible.searchByReference(query, translation);
+        if (result != "Verse not found." && result != "Bible is loading...") {
+            std::string json = std::string("{\"type\": \"reference\", \"query\": \"") + query + 
+                              std::string("\", \"translation\": \"") + translation + 
+                              std::string("\", \"result\": \"") + result + std::string("\"}");
+            return jsonResponse(json);
+        }
+        
+        // Try keyword search
+        auto keyword_results = bible.searchByKeywords(query, translation);
+        if (!keyword_results.empty()) {
+            std::string json = std::string("{\"type\": \"keyword\", \"query\": \"") + query + 
+                              std::string("\", \"translation\": \"") + translation + 
+                              std::string("\", \"results\": [");
+            for (size_t i = 0; i < keyword_results.size(); ++i) {
+                if (i > 0) json += ", ";
+                json += "\"" + keyword_results[i] + "\"";
+            }
+            json += "]}";
+            return jsonResponse(json);
+        }
+        
+        // If no results found, provide available translations info
+        std::string available_translations = "";
+        const auto& translations = bible.getTranslations();
+        for (size_t i = 0; i < translations.size(); ++i) {
+            if (i > 0) available_translations += ", ";
+            available_translations += translations[i].name;
+        }
+        
+        std::string error_msg = "No results found";
+        if (!available_translations.empty()) {
+            error_msg += ". Available translations: " + available_translations;
+        }
+        
+        return errorResponse(404, error_msg);
+    });
+    
+    // Translations endpoint
+    api_server->addRoute(HttpMethod::GET, "/api/translations", [this](const ApiRequest&) -> ApiResponse {
+        if (!bible.isReady()) {
+            return errorResponse(503, "Bible data not ready");
+        }
+        
+        const auto& translations = bible.getTranslations();
+        std::string json = "{\"translations\": [";
+        bool first = true;
+        for (const auto& trans : translations) {
+            if (!first) json += ", ";
+            json += "{\"name\": \"" + trans.name + "\", \"abbreviation\": \"" + trans.abbreviation + "\"}";
+            first = false;
+        }
+        json += "]}";
+        return jsonResponse(json);
+    });
+    
+    // Health check endpoint
+    api_server->addRoute(HttpMethod::GET, "/api/health", [this](const ApiRequest& req) -> ApiResponse {
+        std::string json = std::string("{\"status\": \"ok\", \"bible_ready\": ") + 
+                          (bible.isReady() ? "true" : "false") + 
+                          std::string(", \"api_server_running\": true");
+        
+        // Add test parameter to verify URL decoding works
+        auto test_it = req.query_params.find("test");
+        if (test_it != req.query_params.end()) {
+            json = std::string("{\"status\": \"ok\", \"bible_ready\": ") + 
+                   (bible.isReady() ? "true" : "false") + 
+                   std::string(", \"api_server_running\": true, \"test_decoded\": \"") + 
+                   test_it->second + std::string("\"}");
+        }
+        
+        return jsonResponse(json);
+    });
 }
 
 void VerseFinderApp::run() {
@@ -1369,6 +1516,26 @@ void VerseFinderApp::renderSettingsWindow() {
                     show_performance_stats = showPerfStats;
                 }
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Display search timing information");
+                
+                ImGui::Spacing();
+                
+                // API server settings
+                if (ImGui::Checkbox("Enable API Server", &api_server_enabled)) {
+                    if (api_server_enabled) {
+                        if (!api_server->start(8080)) {
+                            std::cerr << "Failed to start API server" << std::endl;
+                            api_server_enabled = false;
+                        }
+                    } else {
+                        api_server->stop();
+                    }
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enable REST API on port 8080 for external access");
+                
+                if (api_server_enabled && api_server->isRunning()) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Running");
+                }
                 
                 ImGui::Spacing();
                 ImGui::Separator();
@@ -3030,6 +3197,11 @@ std::vector<GLFWmonitor*> VerseFinderApp::getAvailableMonitors() const {
 }
 
 void VerseFinderApp::cleanup() {
+    // Stop API server
+    if (api_server && api_server->isRunning()) {
+        api_server->stop();
+    }
+    
     // Cleanup presentation window first
     destroyPresentationWindow();
     
@@ -3285,6 +3457,37 @@ void VerseFinderApp::renderSplashScreen() {
     ImGui::Text("VerseFinder");
     ImGui::Text("Bible Search for Churches");
     ImGui::Separator();
+    
+    // Update loading progress based on Bible readiness
+    static bool initialization_started = false;
+    static auto initialization_start_time = std::chrono::steady_clock::now();
+    
+    if (!initialization_started) {
+        initialization_started = true;
+        initialization_start_time = std::chrono::steady_clock::now();
+        splash_status = "Loading Bible data...";
+        splash_progress = 0.1f;
+    }
+    
+    // Check if Bible is ready
+    if (bible.isReady()) {
+        splash_status = "Bible data loaded successfully!";
+        splash_progress = 1.0f;
+    } else {
+        // Show progressive loading based on time elapsed
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - initialization_start_time).count();
+        
+        // Simulate progress over 3 seconds maximum, then check readiness
+        float time_progress = std::min(elapsed / 3000.0f, 0.9f);
+        splash_progress = std::max(splash_progress, time_progress);
+        
+        if (elapsed > 3000) {
+            // After 3 seconds, if still not ready, transition anyway to avoid infinite hang
+            splash_status = "Starting application...";
+            splash_progress = 1.0f;
+        }
+    }
     
     // Loading status
     ImGui::Text("Status: %s", splash_status.c_str());

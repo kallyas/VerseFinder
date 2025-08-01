@@ -23,7 +23,6 @@
 #include "../core/UserSettings.h"
 #include "../core/MemoryMonitor.h"
 #include "../core/IncrementalSearch.h"
-#include "MaterialIcons.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -111,7 +110,6 @@ private:
     bool show_memory_window = false;
     
     // UI styling
-    ImFont* icon_font = nullptr;
     void setupImGuiStyle();
     void applyDarkTheme();
     void applyLightTheme();

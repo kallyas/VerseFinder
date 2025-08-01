@@ -52,7 +52,7 @@ private:
     
     std::vector<PCOService> parseServicesResponse(const std::string& response);
     std::vector<PCOItem> parseItemsResponse(const std::string& response);
-    ServicePlan convertPCOToServicePlan(const PCOService& service, const std::vector<PCOItem>& items);
+    void convertPCOToServicePlan(const PCOService& service, const std::vector<PCOItem>& items, ServicePlan& plan);
     std::string convertServicePlanToPCO(const ServicePlan& plan);
     
     // OAuth configuration

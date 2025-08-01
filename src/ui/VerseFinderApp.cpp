@@ -2058,15 +2058,67 @@ void VerseFinderApp::performSearch() {
             }
         }
     } else {
-        // Use keyword search (with fuzzy search if enabled)
-        if (fuzzy_search_enabled) {
-            search_results = bible.searchByKeywordsFuzzy(query, current_translation.name);
+        // Use intelligent search strategy based on query type
+        if (bible.isSemanticSearchEnabled()) {
+            // Parse the query to determine search strategy
+            QueryIntent intent = bible.parseNaturalLanguage(query);
             
-            // Generate suggestions for the current query
-            query_suggestions = bible.generateQuerySuggestions(query, current_translation.name);
-            book_suggestions = bible.findBookNameSuggestions(query);
+            switch (intent.type) {
+                case QueryIntent::BOOLEAN_SEARCH:
+                    search_results = bible.searchBoolean(query, current_translation.name);
+                    break;
+                    
+                case QueryIntent::QUESTION_BASED:
+                    search_results = bible.answerQuestion(query, current_translation.name);
+                    break;
+                    
+                case QueryIntent::TOPICAL_SEARCH:
+                    if (!intent.topics.empty()) {
+                        search_results = bible.searchByTopic(intent.topics[0], current_translation.name);
+                    } else {
+                        search_results = bible.searchSemantic(query, current_translation.name);
+                    }
+                    break;
+                    
+                case QueryIntent::CONTEXTUAL_REQUEST:
+                case QueryIntent::SEMANTIC_SEARCH:
+                    search_results = bible.searchSemantic(query, current_translation.name);
+                    break;
+                    
+                default:
+                    // Fall back to keyword search with fuzzy matching if enabled
+                    if (fuzzy_search_enabled) {
+                        search_results = bible.searchByKeywordsFuzzy(query, current_translation.name);
+                    } else {
+                        search_results = bible.searchByKeywords(query, current_translation.name);
+                    }
+                    break;
+            }
+            
+            // Generate intelligent suggestions
+            auto topical_suggestions = bible.getTopicalSuggestions(query);
+            auto contextual_suggestions = bible.getContextualSuggestions(query);
+            
+            query_suggestions.clear();
+            query_suggestions.insert(query_suggestions.end(), topical_suggestions.begin(), topical_suggestions.end());
+            query_suggestions.insert(query_suggestions.end(), contextual_suggestions.begin(), contextual_suggestions.end());
+            
+            if (fuzzy_search_enabled) {
+                auto fuzzy_suggestions = bible.generateQuerySuggestions(query, current_translation.name);
+                query_suggestions.insert(query_suggestions.end(), fuzzy_suggestions.begin(), fuzzy_suggestions.end());
+                book_suggestions = bible.findBookNameSuggestions(query);
+            }
         } else {
-            search_results = bible.searchByKeywords(query, current_translation.name);
+            // Use traditional keyword search (with fuzzy search if enabled)
+            if (fuzzy_search_enabled) {
+                search_results = bible.searchByKeywordsFuzzy(query, current_translation.name);
+                
+                // Generate suggestions for the current query
+                query_suggestions = bible.generateQuerySuggestions(query, current_translation.name);
+                book_suggestions = bible.findBookNameSuggestions(query);
+            } else {
+                search_results = bible.searchByKeywords(query, current_translation.name);
+            }
         }
         is_viewing_chapter = false;
     }
@@ -2083,6 +2135,13 @@ void VerseFinderApp::performSearch() {
     // Add to search history if enabled and results found
     if (!search_results.empty() && userSettings.content.saveSearchHistory) {
         userSettings.addToSearchHistory(query);
+    }
+    
+    // Record search analytics if enabled
+    if (bible.areAnalyticsEnabled()) {
+        std::string queryType = is_reference_format ? "reference" : 
+                               (bible.isSemanticSearchEnabled() ? "semantic" : "keyword");
+        bible.recordSearch(query, queryType, search_results.size(), last_search_time_ms);
     }
     
     selected_result_index = search_results.empty() ? -1 : 0;
@@ -2110,6 +2169,14 @@ void VerseFinderApp::selectResult(int index) {
     if (index >= 0 && index < static_cast<int>(search_results.size())) {
         selected_result_index = index;
         selected_verse_text = search_results[index];
+        
+        // Record verse selection for analytics
+        if (bible.areAnalyticsEnabled() && !last_search_query.empty()) {
+            std::string verseKey = formatVerseReference(selected_verse_text);
+            if (!verseKey.empty()) {
+                bible.recordVerseSelection(last_search_query, verseKey);
+            }
+        }
     }
 }
 

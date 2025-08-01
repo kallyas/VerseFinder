@@ -1066,3 +1066,423 @@ void VerseFinder::updateAutoCompleteFrequency(const std::string& query) {
 void VerseFinder::clearAutoCompleteCache() {
     auto_complete.clearCache();
 }
+
+// Semantic search method implementations
+std::vector<std::string> VerseFinder::searchSemantic(const std::string& query, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    if (!semantic_search_enabled) return searchByKeywords(query, translation);
+    
+    BENCHMARK_SCOPE("semantic_search");
+    
+    // Parse the natural language query
+    QueryIntent intent = semantic_search.parseQuery(query);
+    
+    // Generate semantic keywords based on the intent
+    std::vector<std::string> semanticKeywords = semantic_search.generateSemanticKeywords(intent);
+    
+    // Based on query type, route to appropriate search method
+    switch (intent.type) {
+        case QueryIntent::REFERENCE_LOOKUP:
+            return {searchByReference(query, translation)};
+            
+        case QueryIntent::BOOLEAN_SEARCH:
+            return searchBoolean(query, translation);
+            
+        case QueryIntent::QUESTION_BASED:
+            return answerQuestion(query, translation);
+            
+        case QueryIntent::TOPICAL_SEARCH:
+            if (!intent.topics.empty()) {
+                return searchByTopic(intent.topics[0], translation);
+            }
+            break;
+            
+        case QueryIntent::CONTEXTUAL_REQUEST:
+        case QueryIntent::SEMANTIC_SEARCH:
+        case QueryIntent::KEYWORD_SEARCH:
+        default:
+            break;
+    }
+    
+    // Perform enhanced keyword search with semantic expansion
+    std::vector<std::string> results;
+    auto trans_it = verses.find(translation);
+    if (trans_it == verses.end()) {
+        return {"Translation not found."};
+    }
+    
+    const auto& translation_verses = trans_it->second;
+    
+    // Score verses based on semantic relevance
+    std::vector<std::pair<std::string, double>> scoredResults;
+    
+    for (const auto& verse_pair : translation_verses) {
+        const std::string& verse_key = verse_pair.first;
+        const Verse& verse = verse_pair.second;
+        
+        double score = 0.0;
+        int matchCount = 0;
+        
+        // Convert verse text to lowercase for comparison
+        std::string lower_verse_text = verse.text;
+        std::transform(lower_verse_text.begin(), lower_verse_text.end(), lower_verse_text.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        
+        // Score based on semantic keyword matches
+        for (const auto& keyword : semanticKeywords) {
+            if (lower_verse_text.find(keyword) != std::string::npos) {
+                matchCount++;
+                // Higher weight for original query keywords
+                bool isOriginalKeyword = std::find(intent.keywords.begin(), intent.keywords.end(), keyword) != intent.keywords.end();
+                score += isOriginalKeyword ? 2.0 : 1.0;
+            }
+        }
+        
+        // Only include verses with sufficient matches
+        if (matchCount >= 1 && score > 0) {
+            scoredResults.push_back({verse_key + ": " + verse.text, score});
+        }
+    }
+    
+    // Sort by relevance score
+    std::sort(scoredResults.begin(), scoredResults.end(), 
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    
+    // Extract top results
+    int maxResults = std::min(50, static_cast<int>(scoredResults.size()));
+    for (int i = 0; i < maxResults; ++i) {
+        results.push_back(scoredResults[i].first);
+    }
+    
+    return results.empty() ? std::vector<std::string>{"No semantic matches found."} : results;
+}
+
+std::vector<std::string> VerseFinder::searchByTopic(const std::string& topic, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    
+    BENCHMARK_SCOPE("topic_search");
+    
+    // Generate topic-specific keywords
+    std::string topicQuery = "verses about " + topic;
+    QueryIntent intent = semantic_search.parseQuery(topicQuery);
+    std::vector<std::string> topicKeywords = semantic_search.generateSemanticKeywords(intent);
+    
+    // Search using topic keywords
+    std::string keywordQuery;
+    for (size_t i = 0; i < topicKeywords.size() && i < 5; ++i) {
+        if (i > 0) keywordQuery += " ";
+        keywordQuery += topicKeywords[i];
+    }
+    
+    return searchByKeywords(keywordQuery, translation);
+}
+
+std::vector<std::string> VerseFinder::answerQuestion(const std::string& question, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    
+    BENCHMARK_SCOPE("question_answering");
+    
+    // Parse question to extract key topics and subject
+    QueryIntent intent = semantic_search.parseQuery(question);
+    
+    if (!intent.subject.empty()) {
+        // Search by the extracted subject
+        return searchByTopic(intent.subject, translation);
+    } else if (!intent.topics.empty()) {
+        // Search by identified topics
+        return searchByTopic(intent.topics[0], translation);
+    } else {
+        // Fall back to semantic search
+        return searchSemantic(question, translation);
+    }
+}
+
+std::vector<std::string> VerseFinder::searchBoolean(const std::string& query, const std::string& translation) const {
+    if (!isReady()) return {"Bible is loading..."};
+    
+    BENCHMARK_SCOPE("boolean_search");
+    
+    // Parse boolean query
+    SemanticSearch::BooleanQuery boolQuery = semantic_search.parseBooleanQuery(query);
+    
+    auto trans_it = verses.find(translation);
+    if (trans_it == verses.end()) {
+        return {"Translation not found."};
+    }
+    
+    const auto& translation_verses = trans_it->second;
+    std::vector<std::string> results;
+    
+    for (const auto& verse_pair : translation_verses) {
+        const std::string& verse_key = verse_pair.first;
+        const Verse& verse = verse_pair.second;
+        
+        std::string lower_verse_text = verse.text;
+        std::transform(lower_verse_text.begin(), lower_verse_text.end(), lower_verse_text.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        
+        bool matches = true;
+        
+        // Check AND terms (all must be present)
+        if (!boolQuery.andTerms.empty()) {
+            for (const auto& term : boolQuery.andTerms) {
+                if (lower_verse_text.find(term) == std::string::npos) {
+                    matches = false;
+                    break;
+                }
+            }
+        }
+        
+        // Check OR terms (at least one must be present)
+        if (matches && !boolQuery.orTerms.empty()) {
+            bool orMatch = false;
+            for (const auto& term : boolQuery.orTerms) {
+                if (lower_verse_text.find(term) != std::string::npos) {
+                    orMatch = true;
+                    break;
+                }
+            }
+            matches = orMatch;
+        }
+        
+        // Check NOT terms (none should be present)
+        if (matches && !boolQuery.notTerms.empty()) {
+            for (const auto& term : boolQuery.notTerms) {
+                if (lower_verse_text.find(term) != std::string::npos) {
+                    matches = false;
+                    break;
+                }
+            }
+        }
+        
+        if (matches) {
+            results.push_back(verse_key + ": " + verse.text);
+        }
+    }
+    
+    return results.empty() ? std::vector<std::string>{"No boolean matches found."} : results;
+}
+
+std::vector<std::string> VerseFinder::getTopicalSuggestions(const std::string& input) const {
+    if (!semantic_search_enabled) return {};
+    return semantic_search.generateTopicalSuggestions(input);
+}
+
+std::vector<std::string> VerseFinder::getContextualSuggestions(const std::string& situation) const {
+    if (!semantic_search_enabled) return {};
+    return semantic_search.generateContextualSuggestions(situation);
+}
+
+std::vector<std::string> VerseFinder::getRelatedTopics(const std::string& topic) const {
+    if (!semantic_search_enabled) return {};
+    return semantic_search.getRelatedTopics(topic);
+}
+
+QueryIntent VerseFinder::parseNaturalLanguage(const std::string& query) const {
+    return semantic_search.parseQuery(query);
+}
+
+void VerseFinder::enableSemanticSearch(bool enable) {
+    semantic_search_enabled = enable;
+    std::cout << "Semantic search " << (enable ? "enabled" : "disabled") << std::endl;
+}
+
+bool VerseFinder::isSemanticSearchEnabled() const {
+    return semantic_search_enabled;
+}
+
+// Cross-reference method implementations
+std::vector<std::string> VerseFinder::findCrossReferences(const std::string& verseKey) const {
+    if (!isReady() || !cross_references_enabled) return {};
+    
+    // Convert verse map to the format expected by CrossReferenceSystem
+    std::unordered_map<std::string, std::string> allVerses;
+    for (const auto& translation_pair : verses) {
+        for (const auto& verse_pair : translation_pair.second) {
+            allVerses[verse_pair.first] = verse_pair.second.text;
+        }
+    }
+    
+    auto crossRefs = cross_reference_system.findCrossReferences(verseKey, allVerses);
+    std::vector<std::string> results;
+    for (const auto& ref : crossRefs) {
+        results.push_back(ref.targetVerse + " [" + ref.relationship + "]");
+    }
+    
+    return results;
+}
+
+std::vector<std::string> VerseFinder::findParallelPassages(const std::string& verseKey) const {
+    if (!isReady() || !cross_references_enabled) return {};
+    
+    std::unordered_map<std::string, std::string> allVerses;
+    for (const auto& translation_pair : verses) {
+        for (const auto& verse_pair : translation_pair.second) {
+            allVerses[verse_pair.first] = verse_pair.second.text;
+        }
+    }
+    
+    return cross_reference_system.findParallelPassages(verseKey, allVerses);
+}
+
+std::vector<std::string> VerseFinder::expandVerseContext(const std::string& verseKey, int contextSize) const {
+    if (!isReady() || !cross_references_enabled) return {};
+    
+    return cross_reference_system.expandContext(verseKey, contextSize, contextSize);
+}
+
+void VerseFinder::enableCrossReferences(bool enable) {
+    cross_references_enabled = enable;
+    std::cout << "Cross-references " << (enable ? "enabled" : "disabled") << std::endl;
+}
+
+bool VerseFinder::areCrossReferencesEnabled() const {
+    return cross_references_enabled;
+}
+
+// Analytics and discovery method implementations
+std::string VerseFinder::getVerseOfTheDay() const {
+    if (!analytics_enabled) return "John 3:16: For God so loved the world...";
+    
+    return search_analytics.getVerseOfTheDay();
+}
+
+std::string VerseFinder::getRandomVerse() const {
+    if (!isReady()) return "";
+    
+    // Convert verses to format expected by SearchAnalytics
+    std::unordered_map<std::string, std::string> allVerses;
+    if (!verses.empty()) {
+        const auto& firstTranslation = verses.begin()->second;
+        for (const auto& verse_pair : firstTranslation) {
+            allVerses[verse_pair.first] = verse_pair.second.text;
+        }
+    }
+    
+    return search_analytics.getRandomVerse(allVerses);
+}
+
+std::vector<std::string> VerseFinder::getPopularVerses(int count) const {
+    if (!analytics_enabled) return {};
+    
+    return search_analytics.getMostPopularVerses(count);
+}
+
+std::vector<std::string> VerseFinder::getTrendingSearches(int days) const {
+    if (!analytics_enabled) return {};
+    
+    return search_analytics.getMostSearchedQueries(10); // Simplified implementation
+}
+
+std::vector<std::string> VerseFinder::getPersonalizedSuggestions() const {
+    if (!analytics_enabled) return {};
+    
+    // Basic implementation combining recent searches and popular verses
+    auto recent = search_analytics.getRecentSearches(5);
+    auto popular = search_analytics.getMostSearchedQueries(5);
+    
+    std::vector<std::string> suggestions;
+    suggestions.insert(suggestions.end(), recent.begin(), recent.end());
+    suggestions.insert(suggestions.end(), popular.begin(), popular.end());
+    
+    return suggestions;
+}
+
+std::vector<std::string> VerseFinder::getRecentSearches(int count) const {
+    if (!analytics_enabled) return {};
+    
+    return search_analytics.getRecentSearches(count);
+}
+
+// Bookmark and collection management
+void VerseFinder::addToFavorites(const std::string& verseKey) {
+    if (analytics_enabled) {
+        search_analytics.addToFavorites(verseKey);
+    }
+}
+
+void VerseFinder::removeFromFavorites(const std::string& verseKey) {
+    if (analytics_enabled) {
+        search_analytics.removeFromFavorites(verseKey);
+    }
+}
+
+std::vector<std::string> VerseFinder::getFavoriteVerses() const {
+    if (!analytics_enabled) return {};
+    
+    return search_analytics.getFavoriteVerses();
+}
+
+bool VerseFinder::isFavorite(const std::string& verseKey) const {
+    if (!analytics_enabled) return false;
+    
+    return search_analytics.isFavorite(verseKey);
+}
+
+void VerseFinder::createCollection(const std::string& name, const std::vector<std::string>& verses) {
+    if (analytics_enabled) {
+        search_analytics.createCollection(name, verses);
+    }
+}
+
+std::vector<std::string> VerseFinder::getCollection(const std::string& name) const {
+    if (!analytics_enabled) return {};
+    
+    return search_analytics.getCollection(name);
+}
+
+std::vector<std::string> VerseFinder::getAllCollections() const {
+    if (!analytics_enabled) return {};
+    
+    return search_analytics.getAllCollections();
+}
+
+// Reading plans and guided discovery
+std::vector<std::string> VerseFinder::generateReadingPlan(const std::string& theme) const {
+    // Basic implementation
+    std::vector<std::string> plan;
+    if (theme == "hope") {
+        plan = {"Jeremiah 29:11", "Romans 15:13", "Psalm 42:11", "Hebrews 11:1"};
+    } else if (theme == "love") {
+        plan = {"1 Corinthians 13:4", "John 3:16", "1 John 4:8", "Romans 8:38"};
+    } else if (theme == "peace") {
+        plan = {"John 14:27", "Philippians 4:7", "Isaiah 26:3", "Psalm 29:11"};
+    } else {
+        plan = {"Psalm 23:1", "John 3:16", "Romans 8:28", "Philippians 4:13"};
+    }
+    
+    return plan;
+}
+
+std::vector<std::string> VerseFinder::getGuidedReadingPlan(const std::string& planType) const {
+    if (planType == "daily") {
+        return {"Genesis 1:1", "Psalm 23:1", "John 3:16", "Romans 8:28"};
+    } else if (planType == "weekly") {
+        return generateReadingPlan("hope");
+    } else {
+        return generateReadingPlan("general");
+    }
+}
+
+// Analytics control
+void VerseFinder::enableAnalytics(bool enable) {
+    analytics_enabled = enable;
+    std::cout << "Analytics " << (enable ? "enabled" : "disabled") << std::endl;
+}
+
+bool VerseFinder::areAnalyticsEnabled() const {
+    return analytics_enabled;
+}
+
+void VerseFinder::recordSearch(const std::string& query, const std::string& queryType, int resultCount, double executionTime) {
+    if (analytics_enabled) {
+        search_analytics.recordSearch(query, queryType, "", resultCount, executionTime, resultCount > 0);
+    }
+}
+
+void VerseFinder::recordVerseSelection(const std::string& query, const std::string& verseKey) {
+    if (analytics_enabled) {
+        search_analytics.recordVerseSelection(query, verseKey);
+        search_analytics.recordVerseAccess(verseKey);
+    }
+}

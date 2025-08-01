@@ -33,6 +33,7 @@
 #include "system/FontManager.h"
 #include "system/WindowManager.h"
 #include "system/PlatformUtils.h"
+#include "system/FileManager.h"
 #include "modals/SettingsModal.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"

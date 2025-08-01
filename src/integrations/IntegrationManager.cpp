@@ -1,5 +1,6 @@
 #include "IntegrationManager.h"
 #include "IntegrationProvider.h"
+#include "PlanningCenterProvider.h"
 #include "../service/ServicePlan.h"
 #include <algorithm>
 
@@ -37,7 +38,20 @@ bool IntegrationManager::testConnection(IntegrationType type) {
     auto config_it = configs_.find(type);
     auto provider_it = providers_.find(type);
     
-    if (config_it == configs_.end() || provider_it == providers_.end()) {
+    if (config_it == configs_.end()) {
+        errors_[type] = "Integration not configured";
+        return false;
+    }
+    
+    if (provider_it == providers_.end()) {
+        errors_[type] = "Provider not available for this integration type";
+        return false;
+    }
+    
+    // Validate config parameters
+    const auto& config = config_it->second;
+    if (config.endpoint.empty() && config.api_key.empty()) {
+        errors_[type] = "Integration configuration is incomplete";
         return false;
     }
     
@@ -62,7 +76,19 @@ bool IntegrationManager::exportServicePlan(const ServicePlan& plan, IntegrationT
     auto config_it = configs_.find(target);
     auto provider_it = providers_.find(target);
     
-    if (config_it == configs_.end() || provider_it == providers_.end()) {
+    if (config_it == configs_.end()) {
+        errors_[target] = "Integration not configured";
+        return false;
+    }
+    
+    if (provider_it == providers_.end()) {
+        errors_[target] = "Provider not available";
+        return false;
+    }
+    
+    // Validate service plan
+    if (plan.getTitle().empty()) {
+        errors_[target] = "Service plan has no title";
         return false;
     }
     
@@ -107,6 +133,9 @@ bool IntegrationManager::importServicePlan(IntegrationType source, ServicePlan& 
 }
 
 bool IntegrationManager::syncServicePlans(IntegrationType type) {
+    // Suppress unused parameter warning for placeholder implementation
+    (void)type;
+    
     // Placeholder for two-way sync implementation
     return false;
 }
@@ -185,13 +214,26 @@ void IntegrationManager::clearErrors(IntegrationType type) {
 
 void IntegrationManager::initializeProviders() {
     // Initialize providers for each integration type
-    // This would be expanded to include actual provider implementations
+    providers_[IntegrationType::PLANNING_CENTER] = std::make_unique<PlanningCenterProvider>();
+    
+    // Initialize other providers as they are implemented
+    // providers_[IntegrationType::CHURCH_TOOLS] = std::make_unique<ChurchToolsProvider>();
+    // providers_[IntegrationType::BREEZE_CHMS] = std::make_unique<BreezeProvider>();
+    // etc.
 }
 
 void IntegrationManager::updateStatus(IntegrationType type, IntegrationStatus status) {
-    statuses_[type] = status;
-    if (status_callback_) {
-        status_callback_(type, status);
+    std::function<void(IntegrationType, IntegrationStatus)> callback;
+    
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        statuses_[type] = status;
+        callback = status_callback_;
+    }
+    
+    // Make callback outside the lock to avoid potential deadlock
+    if (callback) {
+        callback(type, status);
     }
 }
 

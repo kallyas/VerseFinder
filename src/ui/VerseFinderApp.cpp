@@ -36,6 +36,7 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     theme_manager = std::make_unique<ThemeManager>();
     font_manager = std::make_unique<FontManager>();
     window_manager = std::make_unique<WindowManager>();
+    presentation_window_component = std::make_unique<PresentationWindow>(userSettings);
 }
 
 VerseFinderApp::~VerseFinderApp() {

@@ -28,6 +28,7 @@
 #include "../api/ApiServer.h"
 #include "components/SearchComponent.h"
 #include "components/TranslationSelector.h"
+#include "components/PresentationWindow.h"
 #include "settings/ThemeManager.h"
 #include "system/FontManager.h"
 #include "system/WindowManager.h"
@@ -124,6 +125,7 @@ private:
     // UI Components
     std::unique_ptr<SearchComponent> search_component;
     std::unique_ptr<TranslationSelector> translation_selector;
+    std::unique_ptr<PresentationWindow> presentation_window_component;
     std::unique_ptr<ThemeManager> theme_manager;
     std::unique_ptr<FontManager> font_manager;
     std::unique_ptr<WindowManager> window_manager;

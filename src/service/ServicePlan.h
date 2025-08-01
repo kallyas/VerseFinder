@@ -6,6 +6,7 @@
 #include <chrono>
 #include <memory>
 #include <unordered_map>
+#include <mutex>
 
 enum class ServiceItemType {
     SONG,
@@ -159,6 +160,9 @@ private:
     std::vector<ServiceVersion> versions_;
     std::vector<std::string> approval_comments_;
     std::unordered_map<std::string, std::chrono::system_clock::time_point> sync_timestamps_;
+    
+    // Thread safety
+    mutable std::mutex mutex_;
     
     void updateLastModified();
     std::string generateItemId() const;

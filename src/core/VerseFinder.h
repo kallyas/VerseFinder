@@ -13,6 +13,9 @@
 #include "PerformanceBenchmark.h"
 #include "FuzzySearch.h"
 #include "AutoComplete.h"
+#include "SemanticSearch.h"
+#include "CrossReferenceSystem.h"
+#include "SearchAnalytics.h"
 
 using json = nlohmann::json;
 
@@ -49,6 +52,18 @@ private:
     
     // Auto-complete component
     AutoComplete auto_complete;
+    
+    // Semantic search component
+    SemanticSearch semantic_search;
+    bool semantic_search_enabled = true;
+    
+    // Cross-reference system
+    CrossReferenceSystem cross_reference_system;
+    bool cross_references_enabled = true;
+    
+    // Search analytics
+    SearchAnalytics search_analytics;
+    bool analytics_enabled = true;
 
     void loadBibleInternal(const std::string& filename);
     void loadTranslationsFromDirectory(const std::string& dir_path);
@@ -107,6 +122,52 @@ public:
     std::vector<std::string> getSmartSuggestions(const std::string& input, int max_results = 10) const;
     void updateAutoCompleteFrequency(const std::string& query);
     void clearAutoCompleteCache();
+    
+    // Semantic search methods
+    std::vector<std::string> searchSemantic(const std::string& query, const std::string& translation) const;
+    std::vector<std::string> searchByTopic(const std::string& topic, const std::string& translation) const;
+    std::vector<std::string> answerQuestion(const std::string& question, const std::string& translation) const;
+    std::vector<std::string> searchBoolean(const std::string& query, const std::string& translation) const;
+    std::vector<std::string> getTopicalSuggestions(const std::string& input) const;
+    std::vector<std::string> getContextualSuggestions(const std::string& situation) const;
+    std::vector<std::string> getRelatedTopics(const std::string& topic) const;
+    QueryIntent parseNaturalLanguage(const std::string& query) const;
+    void enableSemanticSearch(bool enable);
+    bool isSemanticSearchEnabled() const;
+    
+    // Cross-reference methods
+    std::vector<std::string> findCrossReferences(const std::string& verseKey) const;
+    std::vector<std::string> findParallelPassages(const std::string& verseKey) const;
+    std::vector<std::string> expandVerseContext(const std::string& verseKey, int contextSize = 2) const;
+    void enableCrossReferences(bool enable);
+    bool areCrossReferencesEnabled() const;
+    
+    // Analytics and discovery methods
+    std::string getVerseOfTheDay() const;
+    std::string getRandomVerse() const;
+    std::vector<std::string> getPopularVerses(int count = 10) const;
+    std::vector<std::string> getTrendingSearches(int days = 7) const;
+    std::vector<std::string> getPersonalizedSuggestions() const;
+    std::vector<std::string> getRecentSearches(int count = 10) const;
+    
+    // Bookmark and collection management
+    void addToFavorites(const std::string& verseKey);
+    void removeFromFavorites(const std::string& verseKey);
+    std::vector<std::string> getFavoriteVerses() const;
+    bool isFavorite(const std::string& verseKey) const;
+    void createCollection(const std::string& name, const std::vector<std::string>& verses);
+    std::vector<std::string> getCollection(const std::string& name) const;
+    std::vector<std::string> getAllCollections() const;
+    
+    // Reading plans and guided discovery
+    std::vector<std::string> generateReadingPlan(const std::string& theme) const;
+    std::vector<std::string> getGuidedReadingPlan(const std::string& planType) const;
+    
+    // Analytics control
+    void enableAnalytics(bool enable);
+    bool areAnalyticsEnabled() const;
+    void recordSearch(const std::string& query, const std::string& queryType, int resultCount, double executionTime);
+    void recordVerseSelection(const std::string& query, const std::string& verseKey);
 };
 
 #endif //VERSEFINDER_H

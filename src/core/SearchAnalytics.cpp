@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <random>
 #include <iostream>
+#include <sstream>
+#include <unordered_set>
 
 SearchAnalytics::SearchAnalytics() {
     initializeSeasonalVerses();
@@ -208,4 +210,56 @@ int SearchAnalytics::getTotalSearches() const {
 
 int SearchAnalytics::getUniqueQueriesCount() const {
     return queryFrequency.size();
+}
+
+std::vector<std::string> SearchAnalytics::getRelatedQueries(const std::string& query) const {
+    std::vector<std::string> related;
+    std::string lowerQuery = query;
+    std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+    
+    // Find queries with similar words - "People also searched for" functionality
+    std::unordered_map<std::string, int> relatedQueries;
+    
+    for (const auto& entry : searchHistory) {
+        std::string lowerHistoryQuery = entry.query;
+        std::transform(lowerHistoryQuery.begin(), lowerHistoryQuery.end(), 
+                      lowerHistoryQuery.begin(), ::tolower);
+        
+        if (lowerHistoryQuery != lowerQuery) {
+            // Check for common words
+            std::istringstream queryStream(lowerQuery);
+            std::vector<std::string> queryWords;
+            std::string word;
+            while (queryStream >> word) {
+                queryWords.push_back(word);
+            }
+            
+            int commonWords = 0;
+            for (const auto& queryWord : queryWords) {
+                if (lowerHistoryQuery.find(queryWord) != std::string::npos) {
+                    commonWords++;
+                }
+            }
+            
+            if (commonWords > 0) {
+                relatedQueries[entry.query] += commonWords;
+            }
+        }
+    }
+    
+    // Sort by relevance
+    std::vector<std::pair<std::string, int>> sorted;
+    for (const auto& entry : relatedQueries) {
+        sorted.push_back({entry.first, entry.second});
+    }
+    
+    std::sort(sorted.begin(), sorted.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    
+    // Return top 5 related queries
+    for (int i = 0; i < 5 && i < static_cast<int>(sorted.size()); ++i) {
+        related.push_back(sorted[i].first);
+    }
+    
+    return related;
 }

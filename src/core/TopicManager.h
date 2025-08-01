@@ -10,6 +10,9 @@
 
 using json = nlohmann::json;
 
+// Forward declaration to avoid circular dependency
+struct Verse;
+
 struct TopicCluster {
     std::string name;
     std::vector<std::string> keywords;
@@ -60,7 +63,7 @@ private:
     
     // Topic analysis helpers
     double calculateTopicCoherence(const TopicCluster& cluster, 
-                                 const std::unordered_map<std::string, std::unordered_map<std::string, std::string>>& verses) const;
+                                 const std::unordered_map<std::string, std::unordered_map<std::string, Verse>>& verses) const;
     std::vector<std::string> extractTopicKeywords(const std::vector<std::string>& verseTexts) const;
     double calculateSemanticSimilarity(const std::string& topic1, const std::string& topic2) const;
     
@@ -72,7 +75,7 @@ public:
     TopicManager();
     
     // Topic organization and management
-    void buildTopicIndex(const std::unordered_map<std::string, std::unordered_map<std::string, std::string>>& verses);
+    void buildTopicIndex(const std::unordered_map<std::string, std::unordered_map<std::string, Verse>>& verses);
     void addCustomTopic(const std::string& topicName, const std::vector<std::string>& keywords);
     void updateTopicKeywords(const std::string& topicName, const std::vector<std::string>& newKeywords);
     void removeTopicFromVerse(const std::string& verseKey, const std::string& topic);

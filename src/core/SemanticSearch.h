@@ -112,6 +112,11 @@ public:
     
     BooleanQuery parseBooleanQuery(const std::string& query) const;
     
+    // Advanced pattern matching
+    std::vector<std::string> searchWithWildcards(const std::string& pattern) const;
+    std::vector<std::string> searchWithRegex(const std::string& regexPattern) const;
+    bool matchesWildcardPattern(const std::string& text, const std::string& pattern) const;
+    
     // Suggestion generation
     std::vector<std::string> generateTopicalSuggestions(const std::string& input) const;
     std::vector<std::string> generateContextualSuggestions(const std::string& situation) const;

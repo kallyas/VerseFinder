@@ -16,6 +16,7 @@
 #include "SemanticSearch.h"
 #include "CrossReferenceSystem.h"
 #include "SearchAnalytics.h"
+#include "TopicManager.h"
 
 using json = nlohmann::json;
 
@@ -64,6 +65,10 @@ private:
     // Search analytics
     SearchAnalytics search_analytics;
     bool analytics_enabled = true;
+    
+    // Topic management
+    TopicManager topic_manager;
+    bool topic_analysis_enabled = true;
 
     void loadBibleInternal(const std::string& filename);
     void loadTranslationsFromDirectory(const std::string& dir_path);
@@ -168,6 +173,18 @@ public:
     bool areAnalyticsEnabled() const;
     void recordSearch(const std::string& query, const std::string& queryType, int resultCount, double executionTime);
     void recordVerseSelection(const std::string& query, const std::string& verseKey);
+    
+    // Topic management methods
+    void enableTopicAnalysis(bool enable);
+    bool isTopicAnalysisEnabled() const;
+    std::vector<std::string> getVersesByTopic(const std::string& topic, int maxResults = 50) const;
+    std::vector<std::string> getRelatedTopics(const std::string& topic, int maxResults = 10) const;
+    std::vector<TopicSuggestion> generateTopicSuggestions(const std::string& query) const;
+    std::vector<std::string> getPopularTopics(int count = 10) const;
+    std::vector<std::string> getSeasonalTopicSuggestions() const;
+    std::string getTopicalVerseOfTheDay(const std::string& topic = "") const;
+    void addCustomTopic(const std::string& topicName, const std::vector<std::string>& keywords);
+    TopicManager* getTopicManager();
 };
 
 #endif //VERSEFINDER_H

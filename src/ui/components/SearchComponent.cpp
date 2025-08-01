@@ -8,7 +8,8 @@ SearchComponent::SearchComponent(VerseFinder* verse_finder)
     , show_autocomplete(false)
     , fuzzy_search_enabled(true)
     , incremental_search_enabled(true)
-    , search_input_focused(false) {
+    , search_input_focused(false)
+    , show_advanced_suggestions(false) {
     
     memset(search_input, 0, sizeof(search_input));
 }
@@ -21,6 +22,7 @@ void SearchComponent::render() {
     renderSearchHistory();
     renderSearchButton();
     renderAutoComplete();
+    renderAdvancedSuggestions();
     renderSearchHints();
 }
 
@@ -160,6 +162,53 @@ void SearchComponent::renderAutoComplete() {
     }
 }
 
+void SearchComponent::renderAdvancedSuggestions() {
+    // Show topic suggestions
+    if (!topic_suggestions.empty()) {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Related Topics:");
+        for (size_t i = 0; i < std::min(topic_suggestions.size(), size_t(3)); ++i) {
+            if (ImGui::SmallButton(topic_suggestions[i].c_str())) {
+                setSearchInput(topic_suggestions[i]);
+                performSearch();
+            }
+            if (i < std::min(topic_suggestions.size(), size_t(3)) - 1) {
+                ImGui::SameLine();
+            }
+        }
+    }
+    
+    // Show seasonal suggestions
+    if (!seasonal_suggestions.empty()) {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.4f, 1.0f), "Seasonal Topics:");
+        for (size_t i = 0; i < std::min(seasonal_suggestions.size(), size_t(3)); ++i) {
+            if (ImGui::SmallButton(seasonal_suggestions[i].c_str())) {
+                setSearchInput(seasonal_suggestions[i]);
+                performSearch();
+            }
+            if (i < std::min(seasonal_suggestions.size(), size_t(3)) - 1) {
+                ImGui::SameLine();
+            }
+        }
+    }
+    
+    // Show related queries ("People also searched for")
+    if (!related_queries.empty()) {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.9f, 1.0f), "People also searched for:");
+        for (size_t i = 0; i < std::min(related_queries.size(), size_t(3)); ++i) {
+            if (ImGui::SmallButton(related_queries[i].c_str())) {
+                setSearchInput(related_queries[i]);
+                performSearch();
+            }
+            if (i < std::min(related_queries.size(), size_t(3)) - 1) {
+                ImGui::SameLine();
+            }
+        }
+    }
+}
+
 void SearchComponent::renderSearchHints() {
     // Search hints
     if (strlen(search_input) == 0) {
@@ -218,8 +267,15 @@ void SearchComponent::performIncrementalSearch() {
         return;
     }
     
-    // Only update autocomplete for incremental search
+    // Update autocomplete for incremental search
     updateAutoComplete();
+    
+    // Update advanced suggestions
+    if (strlen(search_input) >= 3) {
+        showTopicSuggestions();
+        showSeasonalSuggestions();
+        showRelatedQueries(search_input);
+    }
 }
 
 void SearchComponent::updateAutoComplete() {
@@ -266,5 +322,31 @@ void SearchComponent::addToSearchHistory(const std::string& query) {
     // Limit history size
     if (search_history.size() > 10) {
         search_history.resize(10);
+    }
+}
+
+// Advanced search feature methods
+void SearchComponent::showTopicSuggestions() {
+    if (verse_finder && verse_finder->isTopicAnalysisEnabled()) {
+        auto suggestions = verse_finder->generateTopicSuggestions(search_input);
+        topic_suggestions.clear();
+        for (const auto& suggestion : suggestions) {
+            topic_suggestions.push_back(suggestion.topic);
+        }
+        show_advanced_suggestions = true;
+    }
+}
+
+void SearchComponent::showRelatedQueries(const std::string& query) {
+    if (verse_finder && verse_finder->areAnalyticsEnabled()) {
+        related_queries = verse_finder->getPersonalizedSuggestions();
+        show_advanced_suggestions = true;
+    }
+}
+
+void SearchComponent::showSeasonalSuggestions() {
+    if (verse_finder && verse_finder->isTopicAnalysisEnabled()) {
+        seasonal_suggestions = verse_finder->getSeasonalTopicSuggestions();
+        show_advanced_suggestions = true;
     }
 }

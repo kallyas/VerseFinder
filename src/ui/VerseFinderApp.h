@@ -25,6 +25,7 @@
 #include "../core/IncrementalSearch.h"
 #include "../integrations/IntegrationManager.h"
 #include "../service/ServicePlan.h"
+#include "../api/ApiServer.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -106,6 +107,10 @@ private:
     std::unique_ptr<IntegrationManager> integration_manager;
     std::unique_ptr<ServicePlan> current_service_plan;
     int selected_integration_type = 0;
+    
+    // API server
+    std::unique_ptr<ApiServer> api_server;
+    bool api_server_enabled = false;
     float splash_progress = 0.0f;
     std::string splash_status = "Initializing...";
     
@@ -124,6 +129,9 @@ private:
     void applyLightTheme();
     void applyBlueTheme();
     void applyGreenTheme();
+    
+    // API server setup
+    void setupApiRoutes();
     
     // Available translations for download
     std::vector<AvailableTranslation> available_translations = {

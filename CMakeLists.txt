@@ -193,6 +193,9 @@ add_executable(VerseFinder
     src/core/AutoComplete.cpp
     src/core/MemoryMonitor.cpp
     src/core/IncrementalSearch.cpp
+    src/core/SemanticSearch.cpp
+    src/core/CrossReferenceSystem.cpp
+    src/core/SearchAnalytics.cpp
     src/ui/VerseFinderApp.cpp
     ${IMGUI_SOURCES}
 )
@@ -302,6 +305,9 @@ add_executable(performance_test
     src/core/AutoComplete.cpp
     src/core/MemoryMonitor.cpp
     src/core/IncrementalSearch.cpp
+    src/core/SemanticSearch.cpp
+    src/core/CrossReferenceSystem.cpp
+    src/core/SearchAnalytics.cpp
 )
 
 # Link libraries for performance test

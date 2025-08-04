@@ -9,6 +9,7 @@
 #include <thread>
 #include <future>
 #include <chrono>
+#include <atomic>
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -193,7 +194,7 @@ bool VerseFinderApp::init() {
         io.Fonts->AddFontFromFileTTF("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", systemFontSize, &config, ranges);
     #endif
     
-    // Setup translations directory and load all translations
+    // Setup translations directory and start async loading
     std::string translations_path = PlatformUtils::PlatformUtils::getExecutablePath() + "/translations";
     bible.setTranslationsDirectory(translations_path);
     bible.loadAllTranslations();
@@ -208,9 +209,8 @@ bool VerseFinderApp::init() {
     translation_comparison->setVerseFinderRef(&bible);
     translation_manager_modal->setVerseFinderRef(&bible);
     
-    // Scan for existing translation files and update status
-    scanForExistingTranslations();
-    updateAvailableTranslationStatus();
+    // Note: Scanning for existing translations will be done asynchronously 
+    // in the background to avoid blocking the GUI initialization
     
     // Apply loaded settings to application state
     fuzzy_search_enabled = userSettings.search.fuzzySearchEnabled;
@@ -3163,6 +3163,8 @@ void VerseFinderApp::renderSplashScreen() {
     
     // Update loading progress based on Bible readiness
     static bool initialization_started = false;
+    static bool scanning_started = false;
+    static std::atomic<bool> scanning_complete{false};
     static auto initialization_start_time = std::chrono::steady_clock::now();
     
     if (!initialization_started) {
@@ -3174,19 +3176,65 @@ void VerseFinderApp::renderSplashScreen() {
     
     // Check if Bible is ready
     if (bible.isReady()) {
-        splash_status = "Bible data loaded successfully!";
-        splash_progress = 1.0f;
+        if (!scanning_started) {
+            // Start async scanning when Bible is ready
+            scanning_started = true;
+            splash_status = "Scanning for translations...";
+            splash_progress = 0.7f;
+            
+            // Start async scanning of existing translations
+            std::thread([&scanning_complete, this]() {
+                // Just scan for files and update status without loading
+                std::vector<std::string> search_directories = {
+                    PlatformUtils::getExecutablePath() + "/translations/",
+                    PlatformUtils::getExecutablePath() + "/",
+                    PlatformUtils::getExecutablePath() + "/data/",
+                    "./translations/",
+                    "./"
+                };
+                
+                for (auto& available : available_translations) {
+                    if (!available.is_downloading) {
+                        available.is_downloaded = false;
+                        
+                        std::string expected_filename = getTranslationFilename(available.name);
+                        
+                        // Check if file exists in any of the search directories
+                        for (const auto& dir : search_directories) {
+                            std::string full_path = dir + expected_filename;
+                            std::ifstream file(full_path);
+                            if (file.is_open()) {
+                                file.close();
+                                available.is_downloaded = true;
+                                std::cout << "Found existing translation file: " << available.name 
+                                          << " at " << full_path << std::endl;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                scanning_complete = true;
+            }).detach();
+        } else if (scanning_complete) {
+            splash_status = "Ready!";
+            splash_progress = 1.0f;
+        } else {
+            // Still scanning, show progress
+            splash_status = "Scanning for translations...";
+            splash_progress = 0.9f;
+        }
     } else {
         // Show progressive loading based on time elapsed
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - initialization_start_time).count();
         
-        // Simulate progress over 3 seconds maximum, then check readiness
-        float time_progress = std::min(elapsed / 3000.0f, 0.9f);
+        // Show progress over time but cap at 70% until Bible is ready
+        float time_progress = std::min(elapsed / 5000.0f, 0.7f);
         splash_progress = std::max(splash_progress, time_progress);
         
-        if (elapsed > 3000) {
-            // After 3 seconds, if still not ready, transition anyway to avoid infinite hang
+        if (elapsed > 10000) {
+            // After 10 seconds, transition anyway to avoid infinite hang
             splash_status = "Starting application...";
             splash_progress = 1.0f;
         }
@@ -3198,8 +3246,19 @@ void VerseFinderApp::renderSplashScreen() {
     
     ImGui::EndChild();
     
-    // Auto-transition to main screen when loading complete
+    // Auto-transition to main screen when loading complete or timeout
     if (splash_progress >= 1.0f) {
-        current_screen = UIScreen::MAIN;
+        // Small delay to show "Ready!" message
+        static auto ready_time = std::chrono::steady_clock::time_point{};
+        if (ready_time == std::chrono::steady_clock::time_point{}) {
+            ready_time = std::chrono::steady_clock::now();
+        }
+        
+        auto elapsed_since_ready = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - ready_time).count();
+        
+        if (elapsed_since_ready > 500) { // 500ms delay
+            current_screen = UIScreen::MAIN;
+        }
     }
 }

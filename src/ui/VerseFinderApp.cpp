@@ -9,6 +9,10 @@
 #include <thread>
 #include <future>
 #include <chrono>
+
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "system/PlatformUtils.h"
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <objc/objc-runtime.h>
@@ -31,95 +35,21 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     // Initialize API server
     api_server = std::make_unique<ApiServer>();
     setupApiRoutes();
+    
+    // Initialize UI components
+    theme_manager = std::make_unique<ThemeManager>();
+    font_manager = std::make_unique<FontManager>();
+    window_manager = std::make_unique<WindowManager>();
+    presentation_window_component = std::make_unique<PresentationWindow>(userSettings);
 }
 
 VerseFinderApp::~VerseFinderApp() {
     cleanup();
 }
 
-float VerseFinderApp::getSystemFontSize() const {
-#ifdef __APPLE__
-    // Get the system font size using Core Text on macOS
-    CTFontRef systemFont = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 0.0, NULL);
-    if (systemFont) {
-        CGFloat fontSize = 24.0f; // Default size
-        CFRelease(systemFont);
-        // Return the system font size, but ensure it's at least 12 and at most 24 for readability
-        return std::max(12.0f, std::min(24.0f, static_cast<float>(fontSize)));
-    }
-#endif
-    // Fallback to a reasonable default size
-    return 16.0f;
-}
 
 void VerseFinderApp::glfwErrorCallback(int error, const char* description) {
     std::cerr << "GLFW Error " << error << ": " << description << std::endl;
-}
-
-std::string VerseFinderApp::getExecutablePath() const {
-#ifdef __APPLE__
-    char buffer[PATH_MAX];
-    uint32_t path_len = sizeof(buffer);
-    if (_NSGetExecutablePath(buffer, &path_len) == 0) {
-        return std::filesystem::path(buffer).parent_path().string();
-    }
-#elif defined(__linux__)
-    char buffer[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
-    if (len != -1) {
-        buffer[len] = '\0';
-        return std::filesystem::path(buffer).parent_path().string();
-    }
-#elif defined(_WIN32)
-    char buffer[MAX_PATH];
-    GetModuleFileNameA(NULL, buffer, MAX_PATH);
-    return std::filesystem::path(buffer).parent_path().string();
-#endif
-    return "";
-}
-
-std::string VerseFinderApp::getSettingsFilePath() const {
-    std::string settingsDir;
-    
-#ifdef __APPLE__
-    // Use ~/Library/Application Support/VerseFinder/ on macOS
-    const char* home = getenv("HOME");
-    if (home) {
-        settingsDir = std::string(home) + "/Library/Application Support/VerseFinder";
-    }
-#elif defined(__linux__)
-    // Use ~/.config/VerseFinder/ on Linux (XDG Base Directory)
-    const char* configHome = getenv("XDG_CONFIG_HOME");
-    if (configHome) {
-        settingsDir = std::string(configHome) + "/VerseFinder";
-    } else {
-        const char* home = getenv("HOME");
-        if (home) {
-            settingsDir = std::string(home) + "/.config/VerseFinder";
-        }
-    }
-#elif defined(_WIN32)
-    // Use %APPDATA%/VerseFinder/ on Windows
-    char appDataPath[MAX_PATH];
-    if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath) == S_OK) {
-        settingsDir = std::string(appDataPath) + "\\VerseFinder";
-    }
-#endif
-    
-    // Fallback to executable directory if platform-specific path fails
-    if (settingsDir.empty()) {
-        settingsDir = getExecutablePath();
-    }
-    
-    // Create directory if it doesn't exist
-    try {
-        std::filesystem::create_directories(settingsDir);
-    } catch (const std::exception& e) {
-        std::cerr << "Failed to create settings directory: " << e.what() << std::endl;
-        return getExecutablePath() + "/settings.json"; // Fallback
-    }
-    
-    return settingsDir + "/settings.json";
 }
 
 bool VerseFinderApp::init() {
@@ -163,6 +93,9 @@ bool VerseFinderApp::init() {
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
     
+    // Explicitly show the window (required on some platforms like macOS)
+    glfwShowWindow(window);
+    
     // Initialize OpenGL loader
 #ifdef IMGUI_IMPL_OPENGL_LOADER_GLEW
     if (glewInit() != GLEW_OK) {
@@ -186,7 +119,7 @@ bool VerseFinderApp::init() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     
     // Setup style
-    setupImGuiStyle();
+    theme_manager->setupImGuiStyle(userSettings.display.colorTheme, userSettings.display.fontSize / 16.0f);
     
     // Apply additional styling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -198,7 +131,7 @@ bool VerseFinderApp::init() {
     ImGui_ImplOpenGL3_Init(glsl_version);
     
     // Load fonts with symbol support using system font size
-    float systemFontSize = getSystemFontSize();
+    float systemFontSize = font_manager->getSystemFontSize();
     
     // Try to load a custom font with fallback to default
     std::vector<std::string> font_paths;
@@ -209,7 +142,7 @@ bool VerseFinderApp::init() {
     #endif
     
     // Runtime path resolution
-    std::string exe_dir = getExecutablePath();
+    std::string exe_dir = PlatformUtils::PlatformUtils::getExecutablePath();
     font_paths.push_back(exe_dir + "/fonts/Gentium_Plus/GentiumPlus-Regular.ttf");
     font_paths.push_back(exe_dir + "/fonts/arial/ARIAL.TTF");
     
@@ -260,9 +193,14 @@ bool VerseFinderApp::init() {
     #endif
     
     // Setup translations directory and load all translations
-    std::string translations_path = getExecutablePath() + "/translations";
+    std::string translations_path = PlatformUtils::PlatformUtils::getExecutablePath() + "/translations";
     bible.setTranslationsDirectory(translations_path);
     bible.loadAllTranslations();
+    
+    // Initialize UI components that need dependencies
+    search_component = std::make_unique<SearchComponent>(&bible);
+    translation_selector = std::make_unique<TranslationSelector>();
+    settings_modal = std::make_unique<SettingsModal>(userSettings, &bible);
     
     // Scan for existing translation files and update status
     scanForExistingTranslations();
@@ -282,288 +220,6 @@ bool VerseFinderApp::init() {
     }
     
     return true;
-}
-
-void VerseFinderApp::setupImGuiStyle() {
-    // Apply theme based on user settings
-    if (userSettings.display.colorTheme == "light") {
-        applyLightTheme();
-    } else if (userSettings.display.colorTheme == "blue") {
-        applyBlueTheme();
-    } else if (userSettings.display.colorTheme == "green") {
-        applyGreenTheme();
-    } else {
-        applyDarkTheme(); // Default to dark theme
-    }
-    
-    ImGuiStyle& style = ImGui::GetStyle();
-    
-    // Borders
-    style.WindowBorderSize = 1.0f;
-    style.FrameBorderSize = 0.0f;
-    style.PopupBorderSize = 1.0f;
-    
-    // Rounding
-    style.WindowRounding = 8.0f;
-    style.ChildRounding = 6.0f;
-    style.FrameRounding = 6.0f;
-    style.PopupRounding = 6.0f;
-    style.ScrollbarRounding = 8.0f;
-    style.GrabRounding = 6.0f;
-    style.TabRounding = 6.0f;
-    
-    // Spacing
-    style.WindowPadding = ImVec2(12, 12);
-    style.FramePadding = ImVec2(8, 6);
-    style.ItemSpacing = ImVec2(8, 6);
-    style.ItemInnerSpacing = ImVec2(6, 4);
-    style.IndentSpacing = 20.0f;
-    style.ScrollbarSize = 16.0f;
-    style.GrabMinSize = 12.0f;
-    
-    // Apply font scaling
-    ImGui::GetIO().FontGlobalScale = userSettings.display.fontSize / 16.0f;
-}
-
-void VerseFinderApp::applyDarkTheme() {
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-    
-    // Dark theme colors
-    colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-    colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.11f, 0.12f, 1.00f);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.15f, 0.15f, 0.16f, 1.00f);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
-    colors[ImGuiCol_Border] = ImVec4(0.28f, 0.28f, 0.29f, 0.50f);
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.25f, 0.27f, 1.00f);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.30f, 0.30f, 0.32f, 1.00f);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.00f);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.29f, 0.48f, 1.00f);
-    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-    colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
-    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_Button] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
-    colors[ImGuiCol_Header] = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_Separator] = ImVec4(0.28f, 0.28f, 0.29f, 0.62f);
-    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.10f, 0.40f, 0.75f, 0.78f);
-    colors[ImGuiCol_SeparatorActive] = ImVec4(0.10f, 0.40f, 0.75f, 1.00f);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.20f);
-    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
-    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
-    colors[ImGuiCol_Tab] = ImVec4(0.18f, 0.35f, 0.58f, 0.86f);
-    colors[ImGuiCol_TabHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
-    colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.41f, 0.68f, 1.00f);
-    colors[ImGuiCol_TabUnfocused] = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
-    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
-    // Docking colors removed - not available in this ImGui version
-    colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
-    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
-    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.19f, 0.19f, 0.20f, 1.00f);
-    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.31f, 0.31f, 0.35f, 1.00f);
-    colors[ImGuiCol_TableBorderLight] = ImVec4(0.23f, 0.23f, 0.25f, 1.00f);
-    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
-    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
-    colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
-}
-
-void VerseFinderApp::applyLightTheme() {
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-    
-    // Light theme colors
-    colors[ImGuiCol_Text] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
-    colors[ImGuiCol_WindowBg] = ImVec4(0.94f, 0.94f, 0.94f, 1.00f);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_PopupBg] = ImVec4(1.00f, 1.00f, 1.00f, 0.98f);
-    colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.30f);
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.96f, 0.96f, 0.96f, 1.00f);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.82f, 0.82f, 0.82f, 1.00f);
-    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(1.00f, 1.00f, 1.00f, 0.51f);
-    colors[ImGuiCol_MenuBarBg] = ImVec4(0.86f, 0.86f, 0.86f, 1.00f);
-    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.98f, 0.98f, 0.98f, 0.53f);
-    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.69f, 0.69f, 0.69f, 0.80f);
-    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.49f, 0.49f, 0.49f, 0.80f);
-    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.49f, 0.49f, 0.49f, 1.00f);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.26f, 0.59f, 0.98f, 0.78f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.46f, 0.54f, 0.80f, 0.60f);
-    colors[ImGuiCol_Button] = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
-    colors[ImGuiCol_Header] = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-    colors[ImGuiCol_Separator] = ImVec4(0.39f, 0.39f, 0.39f, 0.62f);
-    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.14f, 0.44f, 0.80f, 0.78f);
-    colors[ImGuiCol_SeparatorActive] = ImVec4(0.14f, 0.44f, 0.80f, 1.00f);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.35f, 0.35f, 0.35f, 0.17f);
-    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
-    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
-    colors[ImGuiCol_Tab] = ImVec4(0.76f, 0.80f, 0.84f, 0.93f);
-    colors[ImGuiCol_TabHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
-    colors[ImGuiCol_TabActive] = ImVec4(0.60f, 0.73f, 0.88f, 1.00f);
-    colors[ImGuiCol_TabUnfocused] = ImVec4(0.92f, 0.93f, 0.94f, 0.99f);
-    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.74f, 0.82f, 0.91f, 1.00f);
-    colors[ImGuiCol_PlotLines] = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
-    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.45f, 0.00f, 1.00f);
-    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.78f, 0.87f, 0.98f, 1.00f);
-    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.57f, 0.57f, 0.64f, 1.00f);
-    colors[ImGuiCol_TableBorderLight] = ImVec4(0.68f, 0.68f, 0.74f, 1.00f);
-    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.30f, 0.30f, 0.30f, 0.09f);
-    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
-    colors[ImGuiCol_DragDropTarget] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
-    colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.70f, 0.70f, 0.70f, 0.70f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.20f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
-}
-
-void VerseFinderApp::applyBlueTheme() {
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-    
-    // Blue theme colors (dark blue base)
-    colors[ImGuiCol_Text] = ImVec4(0.90f, 0.95f, 1.00f, 1.00f);
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.60f, 0.70f, 1.00f);
-    colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.08f, 0.16f, 1.00f);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.08f, 0.12f, 0.20f, 1.00f);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.04f, 0.06f, 0.12f, 0.95f);
-    colors[ImGuiCol_Border] = ImVec4(0.20f, 0.30f, 0.50f, 0.60f);
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.15f, 0.25f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.15f, 0.25f, 0.40f, 1.00f);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.20f, 0.35f, 0.55f, 1.00f);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.06f, 0.12f, 1.00f);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.29f, 0.48f, 1.00f);
-    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-    colors[ImGuiCol_MenuBarBg] = ImVec4(0.08f, 0.12f, 0.20f, 1.00f);
-    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.04f, 0.08f, 0.53f);
-    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.25f, 0.35f, 0.55f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.35f, 0.45f, 0.65f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.45f, 0.55f, 0.75f, 1.00f);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.35f, 0.60f, 0.95f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.45f, 0.70f, 1.00f, 1.00f);
-    colors[ImGuiCol_Button] = ImVec4(0.20f, 0.40f, 0.80f, 0.60f);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.50f, 0.90f, 1.00f);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.15f, 0.35f, 0.75f, 1.00f);
-    colors[ImGuiCol_Header] = ImVec4(0.20f, 0.40f, 0.80f, 0.45f);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.30f, 0.50f, 0.90f, 0.80f);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.25f, 0.45f, 0.85f, 1.00f);
-    colors[ImGuiCol_Separator] = ImVec4(0.20f, 0.30f, 0.50f, 0.60f);
-    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.30f, 0.50f, 0.80f, 0.78f);
-    colors[ImGuiCol_SeparatorActive] = ImVec4(0.35f, 0.55f, 0.85f, 1.00f);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.20f, 0.40f, 0.80f, 0.25f);
-    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.30f, 0.50f, 0.90f, 0.67f);
-    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.35f, 0.55f, 0.95f, 0.95f);
-    colors[ImGuiCol_Tab] = ImVec4(0.12f, 0.25f, 0.50f, 0.86f);
-    colors[ImGuiCol_TabHovered] = ImVec4(0.30f, 0.50f, 0.90f, 0.80f);
-    colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.35f, 0.70f, 1.00f);
-    colors[ImGuiCol_TabUnfocused] = ImVec4(0.05f, 0.08f, 0.15f, 0.97f);
-    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.12f, 0.20f, 0.40f, 1.00f);
-    colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
-    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
-    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.12f, 0.20f, 0.35f, 1.00f);
-    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.25f, 0.35f, 0.55f, 1.00f);
-    colors[ImGuiCol_TableBorderLight] = ImVec4(0.18f, 0.28f, 0.45f, 1.00f);
-    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.30f, 0.50f, 0.90f, 0.35f);
-    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
-    colors[ImGuiCol_NavHighlight] = ImVec4(0.30f, 0.50f, 0.90f, 1.00f);
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
-}
-
-void VerseFinderApp::applyGreenTheme() {
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-    
-    // Green theme colors (dark green base)
-    colors[ImGuiCol_Text] = ImVec4(0.90f, 1.00f, 0.90f, 1.00f);
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.70f, 0.50f, 1.00f);
-    colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.16f, 0.08f, 1.00f);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.12f, 0.20f, 0.12f, 1.00f);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.06f, 0.12f, 0.06f, 0.95f);
-    colors[ImGuiCol_Border] = ImVec4(0.30f, 0.50f, 0.30f, 0.60f);
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.25f, 0.15f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.40f, 0.25f, 1.00f);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.55f, 0.35f, 1.00f);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.06f, 0.12f, 0.06f, 1.00f);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.29f, 0.48f, 0.29f, 1.00f);
-    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-    colors[ImGuiCol_MenuBarBg] = ImVec4(0.12f, 0.20f, 0.12f, 1.00f);
-    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.04f, 0.08f, 0.04f, 0.53f);
-    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.55f, 0.35f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.65f, 0.45f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.75f, 0.55f, 1.00f);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.70f, 1.00f, 0.70f, 1.00f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.60f, 0.95f, 0.60f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.70f, 1.00f, 0.70f, 1.00f);
-    colors[ImGuiCol_Button] = ImVec4(0.40f, 0.80f, 0.40f, 0.60f);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.50f, 0.90f, 0.50f, 1.00f);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.35f, 0.75f, 0.35f, 1.00f);
-    colors[ImGuiCol_Header] = ImVec4(0.40f, 0.80f, 0.40f, 0.45f);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.50f, 0.90f, 0.50f, 0.80f);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.45f, 0.85f, 0.45f, 1.00f);
-    colors[ImGuiCol_Separator] = ImVec4(0.30f, 0.50f, 0.30f, 0.60f);
-    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.50f, 0.80f, 0.50f, 0.78f);
-    colors[ImGuiCol_SeparatorActive] = ImVec4(0.55f, 0.85f, 0.55f, 1.00f);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.40f, 0.80f, 0.40f, 0.25f);
-    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.50f, 0.90f, 0.50f, 0.67f);
-    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.55f, 0.95f, 0.55f, 0.95f);
-    colors[ImGuiCol_Tab] = ImVec4(0.25f, 0.50f, 0.25f, 0.86f);
-    colors[ImGuiCol_TabHovered] = ImVec4(0.50f, 0.90f, 0.50f, 0.80f);
-    colors[ImGuiCol_TabActive] = ImVec4(0.35f, 0.70f, 0.35f, 1.00f);
-    colors[ImGuiCol_TabUnfocused] = ImVec4(0.08f, 0.15f, 0.08f, 0.97f);
-    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.20f, 0.40f, 0.20f, 1.00f);
-    colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
-    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
-    colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.20f, 0.35f, 0.20f, 1.00f);
-    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.35f, 0.55f, 0.35f, 1.00f);
-    colors[ImGuiCol_TableBorderLight] = ImVec4(0.28f, 0.45f, 0.28f, 1.00f);
-    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.50f, 0.90f, 0.50f, 0.35f);
-    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
-    colors[ImGuiCol_NavHighlight] = ImVec4(0.50f, 0.90f, 0.50f, 1.00f);
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 }
 
 void VerseFinderApp::setupApiRoutes() {
@@ -1406,7 +1062,7 @@ void VerseFinderApp::renderSettingsWindow() {
                         case 2: userSettings.display.colorTheme = "blue"; break;
                         case 3: userSettings.display.colorTheme = "green"; break;
                     }
-                    setupImGuiStyle(); // Apply theme immediately
+                    theme_manager->setupImGuiStyle(userSettings.display.colorTheme, userSettings.display.fontSize / 16.0f); // Apply theme immediately
                 }
                 
                 ImGui::Spacing();
@@ -1940,7 +1596,7 @@ void VerseFinderApp::renderSettingsWindow() {
         
         if (ImGui::Button("📤 Export", ImVec2(120, 0))) {
             // Simple export to current directory for now
-            std::string exportPath = getExecutablePath() + "/exported_settings.json";
+            std::string exportPath = PlatformUtils::getExecutablePath() + "/exported_settings.json";
             if (exportSettings(exportPath)) {
                 std::cout << "Settings exported to: " << exportPath << std::endl;
             } else {
@@ -1951,7 +1607,7 @@ void VerseFinderApp::renderSettingsWindow() {
         
         if (ImGui::Button("📥 Import", ImVec2(120, 0))) {
             // Simple import from current directory for now
-            std::string importPath = getExecutablePath() + "/exported_settings.json";
+            std::string importPath = PlatformUtils::getExecutablePath() + "/exported_settings.json";
             if (importSettings(importPath)) {
                 std::cout << "Settings imported from: " << importPath << std::endl;
                 // Apply imported settings immediately
@@ -1959,7 +1615,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 bible.enableFuzzySearch(fuzzy_search_enabled);
                 auto_search = userSettings.search.autoSearch;
                 show_performance_stats = userSettings.search.showPerformanceStats;
-                setupImGuiStyle(); // Apply theme changes
+                theme_manager->setupImGuiStyle(userSettings.display.colorTheme, userSettings.display.fontSize / 16.0f); // Apply theme changes
             } else {
                 std::cerr << "Failed to import settings or file not found" << std::endl;
             }
@@ -1974,7 +1630,7 @@ void VerseFinderApp::renderSettingsWindow() {
             bible.enableFuzzySearch(fuzzy_search_enabled);
             auto_search = userSettings.search.autoSearch;
             show_performance_stats = userSettings.search.showPerformanceStats;
-            setupImGuiStyle(); // Apply theme changes
+            theme_manager->setupImGuiStyle(userSettings.display.colorTheme, userSettings.display.fontSize / 16.0f); // Apply theme changes
         }
         ImGui::SameLine();
         
@@ -2458,9 +2114,9 @@ void VerseFinderApp::downloadTranslation(const std::string& url, const std::stri
             
             // Try to find existing translation file in common locations first
             std::vector<std::string> search_paths = {
-                getExecutablePath() + "/translations/" + filename,
-                getExecutablePath() + "/" + filename,
-                getExecutablePath() + "/data/" + filename,
+                PlatformUtils::getExecutablePath() + "/translations/" + filename,
+                PlatformUtils::getExecutablePath() + "/" + filename,
+                PlatformUtils::getExecutablePath() + "/data/" + filename,
                 "./translations/" + filename,
                 "./" + filename
             };
@@ -2579,7 +2235,7 @@ bool VerseFinderApp::isTranslationAvailable(const std::string& name) const {
 
 bool VerseFinderApp::saveSettings() const {
     try {
-        std::string settingsPath = getSettingsFilePath();
+        std::string settingsPath = PlatformUtils::getSettingsFilePath();
         
         // Update window state in settings if remembering position
         if (userSettings.display.rememberWindowState && window) {
@@ -2625,7 +2281,7 @@ bool VerseFinderApp::saveSettings() const {
 
 bool VerseFinderApp::loadSettings() {
     try {
-        std::string settingsPath = getSettingsFilePath();
+        std::string settingsPath = PlatformUtils::getSettingsFilePath();
         
         if (!std::filesystem::exists(settingsPath)) {
             std::cout << "Settings file not found, using defaults: " << settingsPath << std::endl;
@@ -2737,9 +2393,9 @@ std::string VerseFinderApp::getTranslationFilename(const std::string& translatio
 void VerseFinderApp::scanForExistingTranslations() {
     // Common search paths for translation files
     std::vector<std::string> search_directories = {
-        getExecutablePath() + "/translations/",
-        getExecutablePath() + "/",
-        getExecutablePath() + "/data/",
+        PlatformUtils::getExecutablePath() + "/translations/",
+        PlatformUtils::getExecutablePath() + "/",
+        PlatformUtils::getExecutablePath() + "/data/",
         "./translations/",
         "./"
     };
@@ -2787,14 +2443,16 @@ std::string VerseFinderApp::downloadFromUrl(const std::string& url) const {
     // Create a temporary file for the download
     std::string temp_file = "/tmp/bible_download_" + std::to_string(std::time(nullptr)) + ".json";
     
-    // Use curl to download the file
-    std::string curl_command = "curl -s -L -f \"" + url + "\" -o \"" + temp_file + "\"";
+    // Use curl to download the file with timeout and better error handling
+    std::string curl_command = "curl -s -L -f --connect-timeout 10 --max-time 30 \"" + url + "\" -o \"" + temp_file + "\"";
     
     std::cout << "Downloading from: " << url << std::endl;
     
     int result = system(curl_command.c_str());
     if (result != 0) {
-        std::cerr << "Failed to download from URL: " << url << std::endl;
+        std::cerr << "Failed to download from URL: " << url << " (curl exit code: " << result << ")" << std::endl;
+        // Clean up temp file if it exists
+        std::remove(temp_file.c_str());
         return "";
     }
     

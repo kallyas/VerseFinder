@@ -1092,7 +1092,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImVec4 highlightColor = ImVec4(1.0f, 0.84f, 0.0f, 1.0f); // Default gold
                 if (ImGui::ColorEdit3("Highlight Color", (float*)&highlightColor)) {
                     char colorHex[16];
-                    sprintf(colorHex, "#%02X%02X%02X", 
+                    snprintf(colorHex, sizeof(colorHex), "#%02X%02X%02X", 
                            (int)(highlightColor.x * 255), 
                            (int)(highlightColor.y * 255), 
                            (int)(highlightColor.z * 255));
@@ -1506,7 +1506,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     if (ImGui::ColorEdit3("Background Color", (float*)&bg_color)) {
                         char hex[8];
-                        sprintf(hex, "#%02X%02X%02X", 
+                        snprintf(hex, sizeof(hex), "#%02X%02X%02X", 
                                (int)(bg_color.x * 255), 
                                (int)(bg_color.y * 255), 
                                (int)(bg_color.z * 255));
@@ -1524,7 +1524,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     if (ImGui::ColorEdit3("Text Color", (float*)&text_color)) {
                         char hex[8];
-                        sprintf(hex, "#%02X%02X%02X", 
+                        snprintf(hex, sizeof(hex), "#%02X%02X%02X", 
                                (int)(text_color.x * 255), 
                                (int)(text_color.y * 255), 
                                (int)(text_color.z * 255));
@@ -1542,7 +1542,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     if (ImGui::ColorEdit3("Reference Color", (float*)&ref_color)) {
                         char hex[8];
-                        sprintf(hex, "#%02X%02X%02X", 
+                        snprintf(hex, sizeof(hex), "#%02X%02X%02X", 
                                (int)(ref_color.x * 255), 
                                (int)(ref_color.y * 255), 
                                (int)(ref_color.z * 255));
@@ -3183,7 +3183,7 @@ void VerseFinderApp::renderSplashScreen() {
             splash_progress = 0.7f;
             
             // Start async scanning of existing translations
-            std::thread([&scanning_complete, this]() {
+            std::thread([this]() {
                 // Just scan for files and update status without loading
                 std::vector<std::string> search_directories = {
                     PlatformUtils::getExecutablePath() + "/translations/",

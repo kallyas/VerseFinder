@@ -202,9 +202,11 @@ bool VerseFinderApp::init() {
     search_component = std::make_unique<SearchComponent>(&bible);
     translation_selector = std::make_unique<TranslationSelector>();
     settings_modal = std::make_unique<SettingsModal>(userSettings, &bible);
+    translation_manager_modal = std::make_unique<TranslationManagerModal>();
     
     // Initialize translation comparison component
     translation_comparison->setVerseFinderRef(&bible);
+    translation_manager_modal->setVerseFinderRef(&bible);
     
     // Scan for existing translation files and update status
     scanForExistingTranslations();
@@ -421,6 +423,9 @@ void VerseFinderApp::run() {
                 if (ImGui::MenuItem("Translation Comparison", "Ctrl+T")) {
                     show_comparison_window = true;
                 }
+                if (ImGui::MenuItem("Translation Manager", "Ctrl+M")) {
+                    translation_manager_modal->setVisible(true);
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help")) {
@@ -478,6 +483,11 @@ void VerseFinderApp::run() {
         
         if (show_comparison_window) {
             renderComparisonWindow();
+        }
+        
+        // Render translation manager modal
+        if (translation_manager_modal) {
+            translation_manager_modal->render();
         }
         
         // Rendering
@@ -1838,6 +1848,11 @@ void VerseFinderApp::handleKeyboardShortcuts() {
     // Ctrl+T - Translation comparison
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_T))) {
         show_comparison_window = true;
+    }
+    
+    // Ctrl+M - Translation manager
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_M))) {
+        translation_manager_modal->setVisible(true);
     }
     
     // F1 - Help

@@ -751,6 +751,16 @@ bool VerseFinder::saveTranslation(const std::string& json_data, const std::strin
     return true;
 }
 
+bool VerseFinder::loadTranslationFromFile(const std::string& filename) {
+    try {
+        loadSingleTranslation(filename);
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading translation file: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 std::string VerseFinder::getAdjacentVerse(const std::string& reference, const std::string& translation, int direction) const {
     if (!isReady()) return "";
     

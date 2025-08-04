@@ -32,6 +32,7 @@
 #include "system/FontManager.h"
 #include "system/WindowManager.h"
 #include "modals/SettingsModal.h"
+#include "modals/TranslationManagerModal.h"
 #include <GLFW/glfw3.h>
 #include <vector>
 #include <string>
@@ -125,6 +126,7 @@ private:
     std::unique_ptr<FontManager> font_manager;
     std::unique_ptr<WindowManager> window_manager;
     std::unique_ptr<SettingsModal> settings_modal;
+    std::unique_ptr<TranslationManagerModal> translation_manager_modal;
     
     // UI state
     bool show_verse_modal = false;

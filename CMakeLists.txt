@@ -238,6 +238,7 @@ add_executable(VerseFinder
     src/ui/system/PlatformUtils.cpp
     src/ui/system/FileManager.cpp
     src/ui/modals/SettingsModal.cpp
+    src/ui/modals/TranslationManagerModal.cpp
     src/integrations/IntegrationManager.cpp
     src/integrations/PlanningCenterProvider.cpp
     src/service/ServicePlan.cpp

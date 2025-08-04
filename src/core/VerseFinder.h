@@ -106,6 +106,7 @@ public:
     const std::vector<TranslationInfo>& getTranslations() const;
     void addTranslation(const std::string& json_data);
     bool saveTranslation(const std::string& json_data, const std::string& filename);
+    bool loadTranslationFromFile(const std::string& filename); // Public wrapper for file loading
     
     // Public utility methods for UI
     bool parseReference(const std::string& reference, std::string& book, int& chapter, int& verse) const;

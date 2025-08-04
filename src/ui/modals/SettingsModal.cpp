@@ -1,12 +1,16 @@
 #include "SettingsModal.h"
 #include <imgui.h>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
 SettingsModal::SettingsModal(UserSettings& settings, VerseFinder* verse_finder)
-    : userSettings(settings), verse_finder(verse_finder) {
+    : userSettings(settings), verse_finder(verse_finder), translations_loading(false), translations_fetched(false) {
     memset(custom_url_input, 0, sizeof(custom_url_input));
     memset(custom_name_input, 0, sizeof(custom_name_input));
+    
+    http_client = std::make_unique<HttpClient>();
     initializeAvailableTranslations();
+    // Don't fetch translations during initialization - do it when modal is first opened
 }
 
 SettingsModal::~SettingsModal() {
@@ -59,8 +63,28 @@ void SettingsModal::render(bool& show_window) {
 }
 
 void SettingsModal::renderTranslationsTab() {
+    // Fetch translations on first access to this tab
+    if (!translations_fetched && !translations_loading) {
+        fetchAvailableTranslations();
+    }
+    
     ImGui::Text("Manage Bible translations for VerseFinder");
     ImGui::Separator();
+    
+    // Refresh translations button
+    if (ImGui::Button("Refresh Available Translations", ImVec2(200, 0))) {
+        fetchAvailableTranslations();
+    }
+    ImGui::SameLine();
+    
+    // Loading indicator
+    if (translations_loading) {
+        ImGui::Text("Loading translations...");
+    } else if (!translations_error.empty()) {
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: %s", translations_error.c_str());
+    }
+    
+    ImGui::Spacing();
     
     // Download all button
     if (ImGui::Button("Download All Free Translations", ImVec2(-1, 30))) {
@@ -229,26 +253,79 @@ void SettingsModal::initializeAvailableTranslations() {
     available_translations = {
         {"King James Version", "KJV", "https://api.getbible.net/v2/kjv.json", 
          "The classic English translation from 1611", true, false, 1.0f},
-        {"New International Version", "NIV", "https://api.getbible.net/v2/niv.json", 
-         "Modern English translation, widely used", false, false, 0.0f},
-        {"English Standard Version", "ESV", "https://api.getbible.net/v2/esv.json", 
-         "Literal yet readable modern translation", false, false, 0.0f},
-        {"New Living Translation", "NLT", "https://api.getbible.net/v2/nlt.json", 
-         "Thought-for-thought contemporary translation", false, false, 0.0f},
         {"American Standard Version", "ASV", "https://api.getbible.net/v2/asv.json", 
          "Classic American revision of the KJV", false, false, 0.0f},
         {"World English Bible", "WEB", "https://api.getbible.net/v2/web.json", 
-         "Modern public domain translation", false, false, 0.0f}
+         "Modern public domain translation", false, false, 0.0f},
+        {"American King James Version", "AKJV", "https://api.getbible.net/v2/akjv.json",
+         "Updated spelling and vocabulary of the KJV", false, false, 0.0f},
+        {"Basic English Bible", "BBE", "https://api.getbible.net/v2/basicenglish.json",
+         "Simple English translation using basic vocabulary", false, false, 0.0f}
     };
 }
 
 void SettingsModal::downloadFromUrl(const std::string& url, const std::string& filename) {
-    // Implementation would perform HTTP download
-    std::cout << "Would download from " << url << " to " << filename << std::endl;
+    if (!http_client) {
+        std::cout << "HTTP client not initialized" << std::endl;
+        return;
+    }
+    
+    bool success = http_client->downloadFile(url, filename, [](double progress) {
+        // Progress callback could update UI here
+        std::cout << "Download progress: " << (progress * 100.0) << "%" << std::endl;
+    });
+    
+    if (success) {
+        std::cout << "Successfully downloaded " << filename << std::endl;
+    } else {
+        std::cout << "Failed to download from " << url << std::endl;
+    }
 }
 
-size_t SettingsModal::writeCallback(void* contents, size_t size, size_t nmemb, std::string* response) {
-    size_t total_size = size * nmemb;
-    response->append((char*)contents, total_size);
-    return total_size;
+void SettingsModal::fetchAvailableTranslations() {
+    if (!http_client) {
+        translations_error = "HTTP client not initialized";
+        return;
+    }
+    
+    translations_loading = true;
+    translations_error.clear();
+    translations_fetched = true;
+    
+    http_client->getAsync("https://api.getbible.net/v2/translations.json",
+        [this](const std::string& response) {
+            try {
+                auto json = nlohmann::json::parse(response);
+                available_translations.clear();
+                
+                for (const auto& [key, value] : json.items()) {
+                    if (value.is_object()) {
+                        std::string name = value.value("translation", "Unknown");
+                        std::string abbreviation = value.value("abbreviation", key);
+                        std::string description = value.value("description", "");
+                        std::string url = "https://api.getbible.net/v2/" + abbreviation + ".json";
+                        
+                        available_translations.emplace_back(
+                            name, abbreviation, url, description, false, false, 0.0f
+                        );
+                    }
+                }
+                
+                translations_loading = false;
+                updateAvailableTranslationStatus();
+                
+            } catch (const std::exception& e) {
+                translations_error = "Failed to parse translations: " + std::string(e.what());
+                translations_loading = false;
+            }
+        },
+        [this](const std::string& error) {
+            translations_error = "Failed to fetch translations: " + error;
+            translations_loading = false;
+        }
+    );
+}
+
+void SettingsModal::refreshTranslationsList() {
+    fetchAvailableTranslations();
 }

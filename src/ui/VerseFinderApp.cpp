@@ -9,6 +9,10 @@
 #include <thread>
 #include <future>
 #include <chrono>
+
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "system/PlatformUtils.h"
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <objc/objc-runtime.h>
@@ -88,6 +92,9 @@ bool VerseFinderApp::init() {
     
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
+    
+    // Explicitly show the window (required on some platforms like macOS)
+    glfwShowWindow(window);
     
     // Initialize OpenGL loader
 #ifdef IMGUI_IMPL_OPENGL_LOADER_GLEW
@@ -2436,14 +2443,16 @@ std::string VerseFinderApp::downloadFromUrl(const std::string& url) const {
     // Create a temporary file for the download
     std::string temp_file = "/tmp/bible_download_" + std::to_string(std::time(nullptr)) + ".json";
     
-    // Use curl to download the file
-    std::string curl_command = "curl -s -L -f \"" + url + "\" -o \"" + temp_file + "\"";
+    // Use curl to download the file with timeout and better error handling
+    std::string curl_command = "curl -s -L -f --connect-timeout 10 --max-time 30 \"" + url + "\" -o \"" + temp_file + "\"";
     
     std::cout << "Downloading from: " << url << std::endl;
     
     int result = system(curl_command.c_str());
     if (result != 0) {
-        std::cerr << "Failed to download from URL: " << url << std::endl;
+        std::cerr << "Failed to download from URL: " << url << " (curl exit code: " << result << ")" << std::endl;
+        // Clean up temp file if it exists
+        std::remove(temp_file.c_str());
         return "";
     }
     

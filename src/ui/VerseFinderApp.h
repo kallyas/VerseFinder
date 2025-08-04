@@ -12,7 +12,6 @@
 #ifndef GL_SILENCE_DEPRECATION
 #define GL_SILENCE_DEPRECATION
 #endif
-#include <OpenGL/gl3.h>
 #else
 #include <GL/gl.h>
 #endif
@@ -21,7 +20,6 @@
 #include "../core/VerseFinder.h"
 #include "../core/FuzzySearch.h"
 #include "../core/UserSettings.h"
-#include "../core/MemoryMonitor.h"
 #include "../core/IncrementalSearch.h"
 #include "../integrations/IntegrationManager.h"
 #include "../service/ServicePlan.h"
@@ -32,16 +30,10 @@
 #include "settings/ThemeManager.h"
 #include "system/FontManager.h"
 #include "system/WindowManager.h"
-#include "system/PlatformUtils.h"
-#include "system/FileManager.h"
 #include "modals/SettingsModal.h"
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include <vector>
 #include <string>
-#include <unordered_map>
 #include <memory>
 #include <chrono>
 
@@ -148,20 +140,14 @@ private:
     std::vector<AvailableTranslation> available_translations = {
         {"King James Version", "KJV", "https://api.getbible.net/v2/kjv.json", 
          "The classic English translation from 1611", false, false, 0.0f},
-        {"New International Version", "NIV", "https://api.getbible.net/v2/niv.json", 
-         "Modern English translation, widely used", false, false, 0.0f},
-        {"English Standard Version", "ESV", "https://api.getbible.net/v2/esv.json", 
-         "Literal yet readable modern translation", false, false, 0.0f},
-        {"New Living Translation", "NLT", "https://api.getbible.net/v2/nlt.json", 
-         "Thought-for-thought contemporary translation", false, false, 0.0f},
         {"American Standard Version", "ASV", "https://api.getbible.net/v2/asv.json", 
          "Classic American revision of the KJV", false, false, 0.0f},
         {"World English Bible", "WEB", "https://api.getbible.net/v2/web.json", 
          "Modern public domain translation", false, false, 0.0f},
-        { "New King James Version", "NKJV", "https://api.getbible.net/v2/nkjv.json",
-         "Modern update of the KJV with updated language", false, false, 0.0f },
-        {"The Message", "MSG", "https://api.getbible.net/v2/msg.json",
-         "Paraphrase translation for contemporary readers", false, false, 0.0f }
+        {"American King James Version", "AKJV", "https://api.getbible.net/v2/akjv.json",
+         "Updated spelling and vocabulary of the KJV", false, false, 0.0f},
+        {"Basic English Bible", "BBE", "https://api.getbible.net/v2/basicenglish.json",
+         "Simple English translation using basic vocabulary", false, false, 0.0f}
     };
     
     // UI rendering methods

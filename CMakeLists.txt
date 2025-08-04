@@ -58,6 +58,31 @@ if(NOT nlohmann_json_FOUND)
     message(STATUS "nlohmann/json downloaded and configured")
 endif()
 
+# libcurl for HTTP requests
+find_package(CURL QUIET)
+
+if(NOT CURL_FOUND)
+    message(STATUS "libcurl not found, downloading...")
+    FetchContent_Declare(
+        curl
+        GIT_REPOSITORY https://github.com/curl/curl.git
+        GIT_TAG curl-8_4_0
+    )
+    
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(CURL_STATICLIB ON CACHE BOOL "" FORCE)
+    set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+    set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)
+    
+    FetchContent_MakeAvailable(curl)
+    
+    set(CURL_LIBRARIES libcurl)
+    set(CURL_INCLUDE_DIRS ${curl_SOURCE_DIR}/include)
+    set(CURL_FOUND TRUE)
+    message(STATUS "libcurl downloaded and configured")
+endif()
+
 # Dear ImGui setup
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
 
@@ -177,6 +202,7 @@ include_directories(
     ${IMGUI_DIR}/backends
     ${OPENGL_LOADER_INCLUDE_DIRS}
     ${GLFW3_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
 )
 
 # Add library directories if needed
@@ -200,6 +226,7 @@ add_executable(VerseFinder
     src/core/CrossReferenceSystem.cpp
     src/core/SearchAnalytics.cpp
     src/core/TopicManager.cpp
+    src/core/HttpClient.cpp
     src/ui/VerseFinderApp.cpp
     src/ui/components/SearchComponent.cpp
     src/ui/components/TranslationSelector.cpp
@@ -234,6 +261,7 @@ target_link_libraries(VerseFinder
     ${GLFW3_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${CMAKE_DL_LIBS}
+    ${CURL_LIBRARIES}
 )
 
 # Link OpenGL loader libraries
@@ -330,8 +358,6 @@ add_executable(performance_test
 
 # Link libraries for performance test
 target_link_libraries(performance_test
-    ${GLFW3_LIBRARIES}
-    ${OPENGL_LIBRARIES}
     ${CMAKE_DL_LIBS}
 )
 

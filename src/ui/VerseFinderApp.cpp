@@ -41,6 +41,7 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     font_manager = std::make_unique<FontManager>();
     window_manager = std::make_unique<WindowManager>();
     presentation_window_component = std::make_unique<PresentationWindow>(userSettings);
+    translation_comparison = std::make_unique<TranslationComparison>();
 }
 
 VerseFinderApp::~VerseFinderApp() {
@@ -201,6 +202,9 @@ bool VerseFinderApp::init() {
     search_component = std::make_unique<SearchComponent>(&bible);
     translation_selector = std::make_unique<TranslationSelector>();
     settings_modal = std::make_unique<SettingsModal>(userSettings, &bible);
+    
+    // Initialize translation comparison component
+    translation_comparison->setVerseFinderRef(&bible);
     
     // Scan for existing translation files and update status
     scanForExistingTranslations();
@@ -414,6 +418,9 @@ void VerseFinderApp::run() {
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Auto Search", nullptr, &auto_search);
                 ImGui::MenuItem("Performance Stats", nullptr, &show_performance_stats);
+                if (ImGui::MenuItem("Translation Comparison", "Ctrl+T")) {
+                    show_comparison_window = true;
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help")) {
@@ -467,6 +474,10 @@ void VerseFinderApp::run() {
         
         if (show_performance_stats) {
             renderPerformanceWindow();
+        }
+        
+        if (show_comparison_window) {
+            renderComparisonWindow();
         }
         
         // Rendering
@@ -1824,6 +1835,11 @@ void VerseFinderApp::handleKeyboardShortcuts() {
         show_settings_window = true;
     }
     
+    // Ctrl+T - Translation comparison
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_T))) {
+        show_comparison_window = true;
+    }
+    
     // F1 - Help
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_F1))) {
         show_help_window = true;
@@ -1859,6 +1875,7 @@ void VerseFinderApp::handleKeyboardShortcuts() {
         show_about_window = false;
         show_help_window = false;
         show_performance_stats = false;
+        show_comparison_window = false;
     }
 }
 
@@ -3097,6 +3114,19 @@ void VerseFinderApp::renderIntegrationsWindow() {
         ImGui::Separator();
         if (ImGui::Button("Close", ImVec2(100, 0))) {
             show_integrations_window = false;
+        }
+    }
+    ImGui::End();
+}
+
+void VerseFinderApp::renderComparisonWindow() {
+    ImGui::SetNextWindowSize(ImVec2(1000, 600), ImGuiCond_FirstUseEver);
+    
+    if (ImGui::Begin("Translation Comparison", &show_comparison_window)) {
+        if (translation_comparison) {
+            translation_comparison->render();
+        } else {
+            ImGui::Text("Translation comparison component not initialized.");
         }
     }
     ImGui::End();

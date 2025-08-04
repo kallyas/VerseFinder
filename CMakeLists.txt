@@ -230,6 +230,7 @@ add_executable(VerseFinder
     src/ui/VerseFinderApp.cpp
     src/ui/components/SearchComponent.cpp
     src/ui/components/TranslationSelector.cpp
+    src/ui/components/TranslationComparison.cpp
     src/ui/components/PresentationWindow.cpp
     src/ui/settings/ThemeManager.cpp
     src/ui/system/FontManager.cpp

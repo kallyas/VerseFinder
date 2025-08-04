@@ -30,7 +30,18 @@ struct Verse {
 struct TranslationInfo {
     std::string name;
     std::string abbreviation;
-    // Add other metadata if needed, like source URL, licensing info
+    std::string description;
+    int year = 0;
+    std::string language;
+    std::string filename;
+    bool is_loaded = false;
+    
+    TranslationInfo() = default;
+    TranslationInfo(const std::string& n, const std::string& abbr, 
+                   const std::string& desc = "", int y = 0, 
+                   const std::string& lang = "", const std::string& file = "")
+        : name(n), abbreviation(abbr), description(desc), year(y), 
+          language(lang), filename(file), is_loaded(false) {}
 };
 
 class VerseFinder {

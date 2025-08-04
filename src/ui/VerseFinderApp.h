@@ -26,6 +26,7 @@
 #include "../api/ApiServer.h"
 #include "components/SearchComponent.h"
 #include "components/TranslationSelector.h"
+#include "components/TranslationComparison.h"
 #include "components/PresentationWindow.h"
 #include "settings/ThemeManager.h"
 #include "system/FontManager.h"
@@ -118,6 +119,7 @@ private:
     // UI Components
     std::unique_ptr<SearchComponent> search_component;
     std::unique_ptr<TranslationSelector> translation_selector;
+    std::unique_ptr<TranslationComparison> translation_comparison;
     std::unique_ptr<PresentationWindow> presentation_window_component;
     std::unique_ptr<ThemeManager> theme_manager;
     std::unique_ptr<FontManager> font_manager;
@@ -132,6 +134,7 @@ private:
     bool show_performance_window = false;
     bool show_memory_window = false;
     bool show_integrations_window = false;
+    bool show_comparison_window = false;
     
     // API server setup
     void setupApiRoutes();
@@ -168,6 +171,7 @@ private:
     void renderHelpWindow();
     void renderPerformanceWindow();
     void renderMemoryWindow();
+    void renderComparisonWindow();
     
     // Presentation mode methods
     void initPresentationWindow();

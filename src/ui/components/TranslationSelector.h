@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <functional>
-#include "../common/TranslationManager.h"
+#include "../../core/VerseFinder.h"
 
 class TranslationSelector {
 public:
@@ -14,7 +14,7 @@ public:
     void render();
     
     // Translation management
-    void setAvailableTranslations(const std::vector<DownloadableTranslation>& translations);
+    void setAvailableTranslations(const std::vector<TranslationInfo>& translations);
     void setCurrentTranslation(const std::string& translation_name);
     std::string getCurrentTranslation() const { return current_translation; }
     
@@ -28,7 +28,7 @@ public:
     }
 
 private:
-    std::vector<DownloadableTranslation> available_translations;
+    std::vector<TranslationInfo> available_translations;
     std::string current_translation;
     
     // Callbacks

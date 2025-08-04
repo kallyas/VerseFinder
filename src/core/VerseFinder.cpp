@@ -37,10 +37,16 @@ void VerseFinder::loadBibleInternal(const std::string& filename) {
     json j;
     file >> j;
 
-    // Assuming a single translation at the top level for KJV data
+    // Extract translation metadata
     std::string trans_name = j["translation"];
     std::string trans_abbr = j["abbreviation"];
-    available_translations.push_back({trans_name, trans_abbr});
+    std::string trans_desc = j.value("description", "");
+    int trans_year = j.value("year", 0);
+    std::string trans_lang = j.value("language", "");
+    
+    TranslationInfo trans_info(trans_name, trans_abbr, trans_desc, trans_year, trans_lang, filename);
+    trans_info.is_loaded = true;
+    available_translations.push_back(trans_info);
 
     for (const auto& book_json : j["books"]) {
         std::string book_name = book_json["name"];
@@ -572,6 +578,9 @@ void VerseFinder::loadSingleTranslation(const std::string& filename) {
 
     std::string trans_name = j.value("translation", "Unknown");
     std::string trans_abbr = j.value("abbreviation", "UNK");
+    std::string trans_desc = j.value("description", "");
+    int trans_year = j.value("year", 0);
+    std::string trans_lang = j.value("language", "");
 
     // Check if translation already exists
     for (const auto& trans_info : available_translations) {
@@ -581,7 +590,9 @@ void VerseFinder::loadSingleTranslation(const std::string& filename) {
         }
     }
 
-    available_translations.push_back({trans_name, trans_abbr});
+    TranslationInfo trans_info(trans_name, trans_abbr, trans_desc, trans_year, trans_lang, filename);
+    trans_info.is_loaded = true;
+    available_translations.push_back(trans_info);
 
     // Load verses
     if (j.contains("books") && j["books"].is_array()) {
@@ -644,6 +655,9 @@ void VerseFinder::loadSingleTranslationOptimized(const std::string& filename, st
 
     std::string trans_name = j.value("translation", "Unknown");
     std::string trans_abbr = j.value("abbreviation", "UNK");
+    std::string trans_desc = j.value("description", "");
+    int trans_year = j.value("year", 0);
+    std::string trans_lang = j.value("language", "");
 
     // Pre-process all data structures without locks
     std::unordered_map<std::string, Verse> local_verses;
@@ -699,7 +713,8 @@ void VerseFinder::loadSingleTranslationOptimized(const std::string& filename, st
             }
         }
         
-        available_translations.push_back({trans_name, trans_abbr});
+        available_translations.push_back(TranslationInfo(trans_name, trans_abbr, trans_desc, trans_year, trans_lang, filename));
+        available_translations.back().is_loaded = true;
         
         // Move local data to shared structures
         verses[trans_name] = std::move(local_verses);

@@ -1,0 +1,85 @@
+name: CI - Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y \
+                build-essential \
+                cmake \
+                pkg-config \
+                libglfw3-dev \
+                libglew-dev \
+                nlohmann-json3-dev \
+                libcurl4-openssl-dev \
+                xvfb
+          - os: macos-latest
+            install_deps: |
+              brew install glfw glew nlohmann-json curl
+          - os: windows-latest
+            install_deps: echo "Using FetchContent for Windows dependencies"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: ${{ matrix.install_deps }}
+
+    - name: Configure CMake
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Create test data
+      run: |
+        cp sample_bible.json build/bible.json
+
+    - name: Run tests (Linux with Xvfb)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cd build
+        xvfb-run -a ./performance_test
+        xvfb-run -a ./validation_test
+        xvfb-run -a ./test_advanced_features
+        xvfb-run -a ./integration_test
+        xvfb-run -a ./quick_test
+
+    - name: Run tests (macOS/Windows)
+      if: matrix.os != 'ubuntu-latest'
+      run: |
+        cd build
+        ./performance_test
+        ./validation_test
+        ./test_advanced_features
+        ./integration_test
+        ./quick_test
+
+    - name: Run CTest
+      run: |
+        cd build
+        ctest --output-on-failure --verbose
+
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ matrix.os }}
+        path: |
+          build/CMakeFiles/CMakeOutput.log
+          build/CMakeFiles/CMakeError.log

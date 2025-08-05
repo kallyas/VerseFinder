@@ -1,8 +1,8 @@
-#include "VerseFinder.h"
-#include "PerformanceBenchmark.h"
-#include "MemoryMonitor.h"
-#include "AutoComplete.h"
-#include "IncrementalSearch.h"
+#include "../src/core/VerseFinder.h"
+#include "../src/core/PerformanceBenchmark.h"
+#include "../src/core/MemoryMonitor.h"
+#include "../src/core/AutoComplete.h"
+#include "../src/core/IncrementalSearch.h"
 #include <iostream>
 #include <chrono>
 #include <thread>

@@ -2,7 +2,7 @@
 #include <fstream>
 #include <thread>
 #include <chrono>
-#include "src/ui/effects/AnimationSystem.h"
+#include "../src/ui/effects/AnimationSystem.h"
 
 // Forward declarations to avoid ImGui dependency
 class MediaManager {

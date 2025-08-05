@@ -1,7 +1,7 @@
-#include "VerseFinder.h"
-#include "MemoryMonitor.h"
-#include "AutoComplete.h"
-#include "IncrementalSearch.h"
+#include "../src/core/VerseFinder.h"
+#include "../src/core/MemoryMonitor.h"
+#include "../src/core/AutoComplete.h"
+#include "../src/core/IncrementalSearch.h"
 #include <iostream>
 
 // Integration test for all performance components

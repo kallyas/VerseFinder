@@ -7,7 +7,13 @@
 
 PresentationWindow::PresentationWindow(UserSettings& settings)
     : userSettings(settings), presentation_window(nullptr), presentation_mode_active(false),
-      presentation_fade_alpha(1.0f), presentation_blank_screen(false) {}
+      presentation_fade_alpha(1.0f), presentation_blank_screen(false) {
+    
+    // Initialize effects systems
+    presentation_effects.loadPreset("default");
+    media_manager.scanDirectory("media", true);
+    media_manager.scanDirectory("backgrounds", true);
+}
 
 PresentationWindow::~PresentationWindow() {
     destroyPresentationWindow();
@@ -81,6 +87,9 @@ void PresentationWindow::destroyPresentationWindow() {
 void PresentationWindow::renderPresentationWindow() {
     if (!presentation_window) return;
     
+    // Update animation system
+    animation_system.update();
+    
     // Switch to presentation window context
     GLFWwindow* previous_context = glfwGetCurrentContext();
     glfwMakeContextCurrent(presentation_window);
@@ -90,9 +99,8 @@ void PresentationWindow::renderPresentationWindow() {
     glfwGetFramebufferSize(presentation_window, &display_w, &display_h);
     glViewport(0, 0, display_w, display_h);
     
-    // Set background color based on settings
-    ImVec4 bg_color = hexToImVec4(userSettings.presentation.backgroundColor);
-    glClearColor(bg_color.x, bg_color.y, bg_color.z, bg_color.w);
+    // Clear with transparent background first
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
     // Start ImGui frame
@@ -102,8 +110,11 @@ void PresentationWindow::renderPresentationWindow() {
     
     setupPresentationStyle();
     
+    // Render background
+    renderBackground();
+    
     if (!presentation_blank_screen && !current_displayed_verse.empty()) {
-        renderPresentationContent();
+        renderEnhancedPresentationContent();
     }
     
     // Render ImGui
@@ -253,6 +264,14 @@ void PresentationWindow::displayVerse(const std::string& verse_text, const std::
     current_displayed_reference = reference;
     presentation_blank_screen = false;
     presentation_fade_alpha = 1.0f;
+    
+    // Start text animation if enabled
+    if (animation_system.isTextAnimationActive()) {
+        animation_system.stopTextAnimation();
+    }
+    
+    // Start default text animation
+    animation_system.startTextAnimation(verse_text, TextAnimationType::FADE_IN, 1500.0f);
 }
 
 void PresentationWindow::clearDisplay() {
@@ -312,4 +331,127 @@ ImVec4 PresentationWindow::hexToImVec4(const std::string& hex_color) {
     } catch (const std::exception&) {
         return ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // Default to white on error
     }
+}
+
+// Enhanced presentation methods
+void PresentationWindow::startTransition(TransitionType type, float duration) {
+    animation_system.startTransition(type, duration);
+}
+
+void PresentationWindow::startTextAnimation(TextAnimationType type, float duration) {
+    if (!current_displayed_verse.empty()) {
+        animation_system.startTextAnimation(current_displayed_verse, type, duration);
+    }
+}
+
+void PresentationWindow::applyTextEffects(const std::string& preset) {
+    presentation_effects.loadPreset(preset);
+}
+
+void PresentationWindow::setBackground(const BackgroundConfig& config) {
+    media_manager.setBackground(config);
+}
+
+void PresentationWindow::startKenBurnsEffect(float duration) {
+    animation_system.startKenBurnsEffect(1.0f, 1.1f, 0.0f, 0.0f, duration);
+}
+
+bool PresentationWindow::isAnimationActive() const {
+    return animation_system.isTransitionActive() || 
+           animation_system.isTextAnimationActive() || 
+           animation_system.isKenBurnsActive();
+}
+
+void PresentationWindow::renderBackground() {
+    ImGuiIO& io = ImGui::GetIO();
+    ImVec2 display_size = io.DisplaySize;
+    
+    // Render background using MediaManager
+    media_manager.renderCurrentBackground(ImVec2(0, 0), display_size);
+}
+
+void PresentationWindow::renderEnhancedPresentationContent() {
+    // Create fullscreen window for content
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(io.DisplaySize);
+    
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | 
+                                   ImGuiWindowFlags_NoMove | 
+                                   ImGuiWindowFlags_NoResize | 
+                                   ImGuiWindowFlags_NoSavedSettings |
+                                   ImGuiWindowFlags_NoBackground;
+    
+    if (ImGui::Begin("Enhanced Presentation Content", nullptr, window_flags)) {
+        // Calculate text positioning
+        float window_width = io.DisplaySize.x;
+        float window_height = io.DisplaySize.y;
+        
+        // Get animated text if animation is active
+        std::string display_verse = animation_system.isTextAnimationActive() ? 
+                                   animation_system.getAnimatedText() : current_displayed_verse;
+        
+        // Calculate text size with wrapping
+        float wrap_width = window_width * 0.9f; // 90% of window width
+        calculateTextLayout(display_verse, wrap_width);
+        
+        ImVec2 text_size = ImGui::CalcTextSize(display_verse.c_str(), nullptr, false, wrap_width);
+        ImVec2 ref_size = ImGui::CalcTextSize(current_displayed_reference.c_str());
+        
+        // Total content height
+        float total_height = text_size.y + ref_size.y + 40; // 40px spacing
+        
+        // Center vertically with transition offset
+        float start_y = (window_height - total_height) * 0.5f;
+        
+        // Apply transition effects
+        if (animation_system.isTransitionActive()) {
+            float progress = animation_system.getTransitionProgress();
+            TransitionType type = animation_system.getCurrentTransitionType();
+            
+            switch (type) {
+                case TransitionType::SLIDE_UP:
+                    start_y += (1.0f - progress) * window_height;
+                    break;
+                case TransitionType::SLIDE_DOWN:
+                    start_y -= (1.0f - progress) * window_height;
+                    break;
+                case TransitionType::SLIDE_LEFT:
+                    // Implement horizontal sliding
+                    break;
+                case TransitionType::SLIDE_RIGHT:
+                    // Implement horizontal sliding
+                    break;
+                case TransitionType::FADE:
+                    presentation_fade_alpha = progress;
+                    break;
+                default:
+                    break;
+            }
+        }
+        
+        // Render verse with effects
+        ImVec2 verse_pos = ImVec2((window_width - wrap_width) * 0.5f, start_y);
+        renderVerseWithEffects(verse_pos, ImVec2(wrap_width, text_size.y));
+        
+        // Render reference with effects
+        ImVec2 ref_pos = ImVec2((window_width - ref_size.x) * 0.5f, start_y + text_size.y + 20);
+        renderReferenceWithEffects(ref_pos, ref_size);
+    }
+    ImGui::End();
+}
+
+void PresentationWindow::renderVerseWithEffects(const ImVec2& position, const ImVec2& size) {
+    std::string display_verse = animation_system.isTextAnimationActive() ? 
+                               animation_system.getAnimatedText() : current_displayed_verse;
+    
+    // Apply text effects
+    presentation_effects.beginTextEffects(position, size, display_verse, nullptr, 0.0f);
+    presentation_effects.endTextEffects();
+}
+
+void PresentationWindow::renderReferenceWithEffects(const ImVec2& position, const ImVec2& size) {
+    // Apply lighter effects to reference text
+    presentation_effects.beginTextEffects(position, size, current_displayed_reference, nullptr, 0.0f);
+    presentation_effects.endTextEffects();
 }

@@ -195,6 +195,7 @@ endif()
 include_directories(
     src/core
     src/ui
+    src/ui/effects
     src/integrations
     src/service
     src/api
@@ -232,6 +233,9 @@ add_executable(VerseFinder
     src/ui/components/TranslationSelector.cpp
     src/ui/components/TranslationComparison.cpp
     src/ui/components/PresentationWindow.cpp
+    src/ui/effects/AnimationSystem.cpp
+    src/ui/effects/PresentationEffects.cpp
+    src/ui/effects/MediaManager.cpp
     src/ui/settings/ThemeManager.cpp
     src/ui/system/FontManager.cpp
     src/ui/system/WindowManager.cpp

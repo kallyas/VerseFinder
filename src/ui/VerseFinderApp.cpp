@@ -9,6 +9,7 @@
 #include <thread>
 #include <future>
 #include <chrono>
+#include <atomic>
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -41,6 +42,7 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     font_manager = std::make_unique<FontManager>();
     window_manager = std::make_unique<WindowManager>();
     presentation_window_component = std::make_unique<PresentationWindow>(userSettings);
+    translation_comparison = std::make_unique<TranslationComparison>();
 }
 
 VerseFinderApp::~VerseFinderApp() {
@@ -192,7 +194,7 @@ bool VerseFinderApp::init() {
         io.Fonts->AddFontFromFileTTF("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", systemFontSize, &config, ranges);
     #endif
     
-    // Setup translations directory and load all translations
+    // Setup translations directory and start async loading
     std::string translations_path = PlatformUtils::PlatformUtils::getExecutablePath() + "/translations";
     bible.setTranslationsDirectory(translations_path);
     bible.loadAllTranslations();
@@ -201,10 +203,14 @@ bool VerseFinderApp::init() {
     search_component = std::make_unique<SearchComponent>(&bible);
     translation_selector = std::make_unique<TranslationSelector>();
     settings_modal = std::make_unique<SettingsModal>(userSettings, &bible);
+    translation_manager_modal = std::make_unique<TranslationManagerModal>();
     
-    // Scan for existing translation files and update status
-    scanForExistingTranslations();
-    updateAvailableTranslationStatus();
+    // Initialize translation comparison component
+    translation_comparison->setVerseFinderRef(&bible);
+    translation_manager_modal->setVerseFinderRef(&bible);
+    
+    // Note: Scanning for existing translations will be done asynchronously 
+    // in the background to avoid blocking the GUI initialization
     
     // Apply loaded settings to application state
     fuzzy_search_enabled = userSettings.search.fuzzySearchEnabled;
@@ -414,6 +420,12 @@ void VerseFinderApp::run() {
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Auto Search", nullptr, &auto_search);
                 ImGui::MenuItem("Performance Stats", nullptr, &show_performance_stats);
+                if (ImGui::MenuItem("Translation Comparison", "Ctrl+T")) {
+                    show_comparison_window = true;
+                }
+                if (ImGui::MenuItem("Translation Manager", "Ctrl+M")) {
+                    translation_manager_modal->setVisible(true);
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help")) {
@@ -467,6 +479,15 @@ void VerseFinderApp::run() {
         
         if (show_performance_stats) {
             renderPerformanceWindow();
+        }
+        
+        if (show_comparison_window) {
+            renderComparisonWindow();
+        }
+        
+        // Render translation manager modal
+        if (translation_manager_modal) {
+            translation_manager_modal->render();
         }
         
         // Rendering
@@ -1071,7 +1092,7 @@ void VerseFinderApp::renderSettingsWindow() {
                 ImVec4 highlightColor = ImVec4(1.0f, 0.84f, 0.0f, 1.0f); // Default gold
                 if (ImGui::ColorEdit3("Highlight Color", (float*)&highlightColor)) {
                     char colorHex[16];
-                    sprintf(colorHex, "#%02X%02X%02X", 
+                    snprintf(colorHex, sizeof(colorHex), "#%02X%02X%02X", 
                            (int)(highlightColor.x * 255), 
                            (int)(highlightColor.y * 255), 
                            (int)(highlightColor.z * 255));
@@ -1485,7 +1506,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     if (ImGui::ColorEdit3("Background Color", (float*)&bg_color)) {
                         char hex[8];
-                        sprintf(hex, "#%02X%02X%02X", 
+                        snprintf(hex, sizeof(hex), "#%02X%02X%02X", 
                                (int)(bg_color.x * 255), 
                                (int)(bg_color.y * 255), 
                                (int)(bg_color.z * 255));
@@ -1503,7 +1524,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     if (ImGui::ColorEdit3("Text Color", (float*)&text_color)) {
                         char hex[8];
-                        sprintf(hex, "#%02X%02X%02X", 
+                        snprintf(hex, sizeof(hex), "#%02X%02X%02X", 
                                (int)(text_color.x * 255), 
                                (int)(text_color.y * 255), 
                                (int)(text_color.z * 255));
@@ -1521,7 +1542,7 @@ void VerseFinderApp::renderSettingsWindow() {
                     
                     if (ImGui::ColorEdit3("Reference Color", (float*)&ref_color)) {
                         char hex[8];
-                        sprintf(hex, "#%02X%02X%02X", 
+                        snprintf(hex, sizeof(hex), "#%02X%02X%02X", 
                                (int)(ref_color.x * 255), 
                                (int)(ref_color.y * 255), 
                                (int)(ref_color.z * 255));
@@ -1824,6 +1845,16 @@ void VerseFinderApp::handleKeyboardShortcuts() {
         show_settings_window = true;
     }
     
+    // Ctrl+T - Translation comparison
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_T))) {
+        show_comparison_window = true;
+    }
+    
+    // Ctrl+M - Translation manager
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_M))) {
+        translation_manager_modal->setVisible(true);
+    }
+    
     // F1 - Help
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_F1))) {
         show_help_window = true;
@@ -1859,6 +1890,7 @@ void VerseFinderApp::handleKeyboardShortcuts() {
         show_about_window = false;
         show_help_window = false;
         show_performance_stats = false;
+        show_comparison_window = false;
     }
 }
 
@@ -3102,6 +3134,19 @@ void VerseFinderApp::renderIntegrationsWindow() {
     ImGui::End();
 }
 
+void VerseFinderApp::renderComparisonWindow() {
+    ImGui::SetNextWindowSize(ImVec2(1000, 600), ImGuiCond_FirstUseEver);
+    
+    if (ImGui::Begin("Translation Comparison", &show_comparison_window)) {
+        if (translation_comparison) {
+            translation_comparison->render();
+        } else {
+            ImGui::Text("Translation comparison component not initialized.");
+        }
+    }
+    ImGui::End();
+}
+
 void VerseFinderApp::renderSplashScreen() {
     // Center the splash content
     ImVec2 window_size = ImGui::GetWindowSize();
@@ -3118,6 +3163,8 @@ void VerseFinderApp::renderSplashScreen() {
     
     // Update loading progress based on Bible readiness
     static bool initialization_started = false;
+    static bool scanning_started = false;
+    static std::atomic<bool> scanning_complete{false};
     static auto initialization_start_time = std::chrono::steady_clock::now();
     
     if (!initialization_started) {
@@ -3129,19 +3176,65 @@ void VerseFinderApp::renderSplashScreen() {
     
     // Check if Bible is ready
     if (bible.isReady()) {
-        splash_status = "Bible data loaded successfully!";
-        splash_progress = 1.0f;
+        if (!scanning_started) {
+            // Start async scanning when Bible is ready
+            scanning_started = true;
+            splash_status = "Scanning for translations...";
+            splash_progress = 0.7f;
+            
+            // Start async scanning of existing translations
+            std::thread([this]() {
+                // Just scan for files and update status without loading
+                std::vector<std::string> search_directories = {
+                    PlatformUtils::getExecutablePath() + "/translations/",
+                    PlatformUtils::getExecutablePath() + "/",
+                    PlatformUtils::getExecutablePath() + "/data/",
+                    "./translations/",
+                    "./"
+                };
+                
+                for (auto& available : available_translations) {
+                    if (!available.is_downloading) {
+                        available.is_downloaded = false;
+                        
+                        std::string expected_filename = getTranslationFilename(available.name);
+                        
+                        // Check if file exists in any of the search directories
+                        for (const auto& dir : search_directories) {
+                            std::string full_path = dir + expected_filename;
+                            std::ifstream file(full_path);
+                            if (file.is_open()) {
+                                file.close();
+                                available.is_downloaded = true;
+                                std::cout << "Found existing translation file: " << available.name 
+                                          << " at " << full_path << std::endl;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                scanning_complete = true;
+            }).detach();
+        } else if (scanning_complete) {
+            splash_status = "Ready!";
+            splash_progress = 1.0f;
+        } else {
+            // Still scanning, show progress
+            splash_status = "Scanning for translations...";
+            splash_progress = 0.9f;
+        }
     } else {
         // Show progressive loading based on time elapsed
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - initialization_start_time).count();
         
-        // Simulate progress over 3 seconds maximum, then check readiness
-        float time_progress = std::min(elapsed / 3000.0f, 0.9f);
+        // Show progress over time but cap at 70% until Bible is ready
+        float time_progress = std::min(elapsed / 5000.0f, 0.7f);
         splash_progress = std::max(splash_progress, time_progress);
         
-        if (elapsed > 3000) {
-            // After 3 seconds, if still not ready, transition anyway to avoid infinite hang
+        if (elapsed > 10000) {
+            // After 10 seconds, transition anyway to avoid infinite hang
             splash_status = "Starting application...";
             splash_progress = 1.0f;
         }
@@ -3153,8 +3246,19 @@ void VerseFinderApp::renderSplashScreen() {
     
     ImGui::EndChild();
     
-    // Auto-transition to main screen when loading complete
+    // Auto-transition to main screen when loading complete or timeout
     if (splash_progress >= 1.0f) {
-        current_screen = UIScreen::MAIN;
+        // Small delay to show "Ready!" message
+        static auto ready_time = std::chrono::steady_clock::time_point{};
+        if (ready_time == std::chrono::steady_clock::time_point{}) {
+            ready_time = std::chrono::steady_clock::now();
+        }
+        
+        auto elapsed_since_ready = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - ready_time).count();
+        
+        if (elapsed_since_ready > 500) { // 500ms delay
+            current_screen = UIScreen::MAIN;
+        }
     }
 }

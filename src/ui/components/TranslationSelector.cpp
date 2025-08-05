@@ -16,9 +16,14 @@ void TranslationSelector::render() {
     // Translation dropdown
     if (ImGui::BeginCombo("##translation", current_translation.c_str())) {
         for (const auto& translation : available_translations) {
-            if (translation.is_downloaded) {
+            if (translation.is_loaded) {
                 bool is_selected = (current_translation == translation.abbreviation);
-                if (ImGui::Selectable((translation.abbreviation + " - " + translation.name).c_str(), is_selected)) {
+                std::string display_text = translation.abbreviation + " - " + translation.name;
+                if (!translation.description.empty()) {
+                    display_text += " (" + translation.description + ")";
+                }
+                
+                if (ImGui::Selectable(display_text.c_str(), is_selected)) {
                     current_translation = translation.abbreviation;
                     if (on_translation_changed) {
                         on_translation_changed(current_translation);
@@ -40,7 +45,7 @@ void TranslationSelector::render() {
     }
 }
 
-void TranslationSelector::setAvailableTranslations(const std::vector<DownloadableTranslation>& translations) {
+void TranslationSelector::setAvailableTranslations(const std::vector<TranslationInfo>& translations) {
     available_translations = translations;
 }
 
@@ -50,15 +55,10 @@ void TranslationSelector::setCurrentTranslation(const std::string& translation_n
 
 void TranslationSelector::initializeDefaultTranslations() {
     available_translations = {
-        {"King James Version", "KJV", "https://api.getbible.net/v2/kjv.json", 
-         "The classic English translation from 1611", true, false, 1.0f},
-        {"American Standard Version", "ASV", "https://api.getbible.net/v2/asv.json", 
-         "Classic American revision of the KJV", false, false, 0.0f},
-        {"World English Bible", "WEB", "https://api.getbible.net/v2/web.json", 
-         "Modern public domain translation", false, false, 0.0f},
-        {"American King James Version", "AKJV", "https://api.getbible.net/v2/akjv.json",
-         "Updated spelling and vocabulary of the KJV", false, false, 0.0f},
-        {"Basic English Bible", "BBE", "https://api.getbible.net/v2/basicenglish.json",
-         "Simple English translation using basic vocabulary", false, false, 0.0f}
+        TranslationInfo("King James Version", "KJV", "The classic English translation from 1611", 1611, "English"),
+        TranslationInfo("American Standard Version", "ASV", "Classic American revision of the KJV", 1901, "English"),
+        TranslationInfo("World English Bible", "WEB", "Modern public domain translation", 2000, "English"),
+        TranslationInfo("American King James Version", "AKJV", "Updated spelling and vocabulary of the KJV", 1999, "English"),
+        TranslationInfo("Basic English Bible", "BBE", "Simple English translation using basic vocabulary", 1965, "English")
     };
 }

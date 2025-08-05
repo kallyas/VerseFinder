@@ -57,7 +57,7 @@ public:
     AutoComplete& operator=(const AutoComplete&) = delete;
     
     // Build the autocomplete index from verse data
-    void buildIndex(const std::unordered_map<std::string, std::unordered_map<std::string, class Verse>>& verses);
+    void buildIndex(const std::unordered_map<std::string, std::unordered_map<std::string, struct Verse>>& verses);
     
     // Add a book name to the reference patterns
     void addBookName(const std::string& book_name);

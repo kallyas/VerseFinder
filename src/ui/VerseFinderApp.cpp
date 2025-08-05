@@ -2081,17 +2081,45 @@ std::string VerseFinderApp::formatVerseText(const std::string& verse_text) {
 }
 
 void VerseFinderApp::navigateToVerse(int direction) {
-    if (selected_verse_text.empty()) return;
+    if (selected_verse_text.empty()) {
+        std::cout << "Warning: No verse selected for navigation" << std::endl;
+        return;
+    }
     
     // Parse current verse reference
     std::string reference = formatVerseReference(selected_verse_text);
-    if (reference.empty()) return;
+    if (reference.empty()) {
+        std::cout << "Warning: Could not parse verse reference for navigation" << std::endl;
+        return;
+    }
     
     // Use the improved navigation method from VerseFinder
     std::string result = bible.getAdjacentVerse(reference, current_translation.name, direction);
     
     if (!result.empty()) {
+        // Update selected verse text
         selected_verse_text = result;
+        
+        // Update search results to maintain UI consistency
+        search_results = {result};
+        selected_result_index = 0;
+        
+        // Extract just the reference for the search input display
+        std::string new_reference = formatVerseReference(result);
+        if (!new_reference.empty()) {
+            strncpy(search_input, new_reference.c_str(), sizeof(search_input) - 1);
+            search_input[sizeof(search_input) - 1] = '\0';
+        }
+        
+        std::cout << "Navigated to: " << new_reference << std::endl;
+    } else {
+        // Provide user feedback when navigation reaches boundaries
+        std::string direction_text = (direction > 0) ? "next" : "previous";
+        if (std::abs(direction) > 1) {
+            direction_text = (direction > 0) ? ("next " + std::to_string(direction)) : ("previous " + std::to_string(-direction));
+        }
+        std::cout << "Cannot navigate to " << direction_text << " verse from " << reference 
+                  << " (reached boundary)" << std::endl;
     }
 }
 

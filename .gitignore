@@ -169,6 +169,12 @@ docs/latex/
 # Testing
 test_results/
 *.test
+test_navigation*
+debug_navigation*
+debug_multistep*
+test_expanded_navigation*
+test_full_navigation*
+test_bible.json
 
 # Profiling
 *.prof

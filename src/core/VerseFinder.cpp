@@ -817,6 +817,13 @@ std::string VerseFinder::getAdjacentVerse(const std::string& reference, const st
                     if (i == 0) return ""; // Couldn't move at all
                     break; // Stop here with current position
                 }
+            } else {
+                // Check if the previous verse exists in the current chapter
+                if (!verseExists(normalized_book, current_chapter, next_verse, translation)) {
+                    // Previous verse doesn't exist in current chapter
+                    if (i == 0) return ""; // Couldn't move at all
+                    break; // Stop here with current position
+                }
             }
         }
         

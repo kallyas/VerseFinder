@@ -190,6 +190,11 @@ include_directories(
     src/integrations
     src/service
     src/api
+    src/plugins
+    src/plugins/interfaces
+    src/plugins/api
+    src/plugins/manager
+    src/plugins/security
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
     ${OPENGL_LOADER_INCLUDE_DIRS}
@@ -239,6 +244,9 @@ add_executable(VerseFinder
     src/ui/accessibility/AccessibilityManager.cpp
     src/ui/modals/SettingsModal.cpp
     src/ui/modals/TranslationManagerModal.cpp
+    src/ui/components/PluginManagerWindow.cpp
+    src/plugins/manager/PluginManager.cpp
+    src/plugins/security/PluginSecurity.cpp
     src/integrations/IntegrationManager.cpp
     src/integrations/PlanningCenterProvider.cpp
     src/service/ServicePlan.cpp
@@ -552,3 +560,42 @@ add_test(NAME ValidationTest COMMAND validation_test)
 add_test(NAME AdvancedFeaturesTest COMMAND test_advanced_features)
 add_test(NAME IntegrationTest COMMAND integration_test)
 add_test(NAME QuickTest COMMAND quick_test)
+
+# Example plugins
+add_library(enhanced_search_plugin SHARED
+    src/plugins/examples/enhanced_search_plugin.cpp
+)
+
+add_library(simple_ui_plugin SHARED
+    src/plugins/examples/simple_ui_plugin.cpp
+)
+
+# Configure both plugins
+foreach(PLUGIN enhanced_search_plugin simple_ui_plugin)
+    # Platform-specific naming for plugin
+    if(WIN32)
+        set_target_properties(${PLUGIN} PROPERTIES
+            OUTPUT_NAME "${PLUGIN}"
+            PREFIX ""
+            SUFFIX ".dll"
+        )
+    elseif(APPLE)
+        set_target_properties(${PLUGIN} PROPERTIES
+            OUTPUT_NAME "${PLUGIN}"
+            PREFIX "lib"
+            SUFFIX ".dylib"
+        )
+    else()
+        set_target_properties(${PLUGIN} PROPERTIES
+            OUTPUT_NAME "${PLUGIN}"
+            PREFIX "lib"
+            SUFFIX ".so"
+        )
+    endif()
+    
+    # Copy plugin to plugins directory
+    add_custom_command(TARGET ${PLUGIN} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/plugins
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PLUGIN}> ${CMAKE_BINARY_DIR}/plugins/
+    )
+endforeach()

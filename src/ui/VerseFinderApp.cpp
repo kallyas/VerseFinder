@@ -1,4 +1,5 @@
 #include "VerseFinderApp.h"
+#include "components/PluginManagerWindow.h"
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -44,6 +45,12 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     accessibility_manager = std::make_unique<AccessibilityManager>();
     presentation_window_component = std::make_unique<PresentationWindow>(userSettings);
     translation_comparison = std::make_unique<TranslationComparison>();
+    
+    // Initialize plugin system
+    if (plugins_enabled) {
+        plugin_manager = std::make_unique<PluginSystem::PluginManager>(&bible);
+        initializePluginSystem();
+    }
 }
 
 VerseFinderApp::~VerseFinderApp() {
@@ -512,6 +519,12 @@ void VerseFinderApp::run() {
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Tools")) {
+                if (ImGui::MenuItem("Plugin Manager", "Ctrl+Shift+P", false, plugins_enabled)) {
+                    show_plugin_manager_window = true;
+                }
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("Help")) {
                 if (ImGui::MenuItem("Help", "F1")) {
                     show_help_window = true;
@@ -555,6 +568,10 @@ void VerseFinderApp::run() {
         
         if (show_help_window) {
             renderHelpWindow();
+        }
+        
+        if (show_plugin_manager_window) {
+            renderPluginManagerWindow();
         }
         
         if (show_integrations_window) {
@@ -1777,6 +1794,22 @@ void VerseFinderApp::renderAboutWindow() {
         }
     }
     ImGui::End();
+}
+
+void VerseFinderApp::renderPluginManagerWindow() {
+    if (!plugin_manager) {
+        show_plugin_manager_window = false;
+        return;
+    }
+    
+    // Create plugin manager window component if it doesn't exist
+    static std::unique_ptr<PluginSystem::PluginManagerWindow> plugin_window;
+    if (!plugin_window) {
+        plugin_window = std::make_unique<PluginSystem::PluginManagerWindow>(plugin_manager.get());
+    }
+    
+    // Render the plugin manager window
+    plugin_window->render(&show_plugin_manager_window);
 }
 
 void VerseFinderApp::renderHelpWindow() {
@@ -3007,6 +3040,9 @@ void VerseFinderApp::cleanup() {
         api_server->stop();
     }
     
+    // Shutdown plugin system
+    shutdownPluginSystem();
+    
     // Cleanup presentation window first
     destroyPresentationWindow();
     
@@ -3375,5 +3411,55 @@ void VerseFinderApp::renderSplashScreen() {
         if (elapsed_since_ready > 500) { // 500ms delay
             current_screen = UIScreen::MAIN;
         }
+    }
+}
+
+// Plugin system methods
+void VerseFinderApp::initializePluginSystem() {
+    if (!plugin_manager) return;
+    
+    // Create plugins directory if it doesn't exist
+    std::string plugins_dir = "plugins";
+    std::string config_dir = "config/plugins";
+    
+    try {
+        std::filesystem::create_directories(plugins_dir);
+        std::filesystem::create_directories(config_dir);
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to create plugin directories: " << e.what() << std::endl;
+        return;
+    }
+    
+    // Initialize plugin manager
+    if (!plugin_manager->initialize(plugins_dir, config_dir)) {
+        std::cerr << "Failed to initialize plugin manager" << std::endl;
+        plugins_enabled = false;
+        plugin_manager.reset();
+        return;
+    }
+    
+    // Set up plugin callbacks
+    plugin_manager->addLoadCallback([this](const std::string& name, bool success, const std::string& error) {
+        if (success) {
+            std::cout << "Plugin loaded: " << name << std::endl;
+        } else {
+            std::cerr << "Failed to load plugin " << name << ": " << error << std::endl;
+        }
+    });
+    
+    plugin_manager->addUnloadCallback([this](const std::string& name) {
+        std::cout << "Plugin unloaded: " << name << std::endl;
+    });
+    
+    // Auto-scan for plugins
+    plugin_manager->scanForPlugins();
+    
+    std::cout << "Plugin system initialized successfully" << std::endl;
+}
+
+void VerseFinderApp::shutdownPluginSystem() {
+    if (plugin_manager) {
+        plugin_manager->shutdown();
+        plugin_manager.reset();
     }
 }

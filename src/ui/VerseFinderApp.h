@@ -155,6 +155,8 @@ private:
     // API server setup
     void setupApiRoutes();
     void setupMobileAPI();
+    void setupMobileFileRoutes();
+    ApiResponse serveMobileFile(const std::string& filename);
     
     // Presentation control methods for mobile API
     bool isPresentationModeActive() const;

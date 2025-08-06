@@ -326,6 +326,9 @@ void VerseFinderApp::setupApiRoutes() {
     mobile_api->setupApiRoutes(api_server.get());
     mobile_api->setupWebSocketHandlers(websocket_server.get());
     
+    // Mobile companion app static file routes
+    setupMobileFileRoutes();
+    
     // Search endpoint
     // Examples: 
     // /api/search?q=John%203:16 (John 3:16)
@@ -455,6 +458,88 @@ void VerseFinderApp::setupApiRoutes() {
         
         return jsonResponse(json);
     });
+}
+
+void VerseFinderApp::setupMobileFileRoutes() {
+    // Serve mobile companion app static files
+    
+    // Main mobile app page - serve index.html for /mobile/ and /mobile
+    api_server->addRoute(HttpMethod::GET, "/mobile/", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("index.html");
+    });
+    
+    api_server->addRoute(HttpMethod::GET, "/mobile", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("index.html");
+    });
+    
+    // CSS files
+    api_server->addRoute(HttpMethod::GET, "/mobile/style.css", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("style.css");
+    });
+    
+    // JavaScript files
+    api_server->addRoute(HttpMethod::GET, "/mobile/app.js", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("app.js");
+    });
+    
+    // Service worker
+    api_server->addRoute(HttpMethod::GET, "/mobile/sw.js", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("sw.js");
+    });
+    
+    // PWA manifest
+    api_server->addRoute(HttpMethod::GET, "/mobile/manifest.json", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("manifest.json");
+    });
+    
+    // Demo page
+    api_server->addRoute(HttpMethod::GET, "/mobile/demo.html", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("demo.html");
+    });
+    
+    // README
+    api_server->addRoute(HttpMethod::GET, "/mobile/README.md", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("README.md");
+    });
+}
+
+ApiResponse VerseFinderApp::serveMobileFile(const std::string& filename) {
+    // Construct the full path to the mobile file
+    std::string mobile_dir = "mobile/";
+    std::string file_path = mobile_dir + filename;
+    
+    // Check if file exists and read it
+    std::ifstream file(file_path, std::ios::binary);
+    if (!file.is_open()) {
+        return errorResponse(404, "Mobile app file not found: " + filename);
+    }
+    
+    // Read file content
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+    
+    // Determine content type based on file extension
+    std::string content_type = "text/plain";
+    if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".html") {
+        content_type = "text/html";
+    } else if (filename.length() >= 4 && filename.substr(filename.length() - 4) == ".css") {
+        content_type = "text/css";
+    } else if (filename.length() >= 3 && filename.substr(filename.length() - 3) == ".js") {
+        content_type = "application/javascript";
+    } else if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".json") {
+        content_type = "application/json";
+    } else if (filename.length() >= 3 && filename.substr(filename.length() - 3) == ".md") {
+        content_type = "text/markdown";
+    }
+    
+    // Create response
+    ApiResponse response;
+    response.status_code = 200;
+    response.headers["Content-Type"] = content_type;
+    response.headers["Cache-Control"] = "no-cache"; // Ensure fresh content during development
+    response.body = content;
+    
+    return response;
 }
 
 void VerseFinderApp::run() {

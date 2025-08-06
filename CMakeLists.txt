@@ -219,6 +219,10 @@ add_executable(VerseFinder
     src/core/SearchAnalytics.cpp
     src/core/TopicManager.cpp
     src/core/HttpClient.cpp
+    src/core/ReliabilityManager.cpp
+    src/core/CrashRecoverySystem.cpp
+    src/core/ErrorHandler.cpp
+    src/core/HealthMonitor.cpp
     src/ui/VerseFinderApp.cpp
     src/ui/components/SearchComponent.cpp
     src/ui/components/TranslationSelector.cpp

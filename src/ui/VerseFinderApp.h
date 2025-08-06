@@ -21,6 +21,7 @@
 #include "../core/FuzzySearch.h"
 #include "../core/UserSettings.h"
 #include "../core/IncrementalSearch.h"
+#include "../core/ReliabilityManager.h"
 #include "../integrations/IntegrationManager.h"
 #include "../service/ServicePlan.h"
 #include "../api/ApiServer.h"

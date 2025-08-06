@@ -1,6 +1,6 @@
-#include "../src/core/VerseFinder.h"
-#include "../src/core/PerformanceBenchmark.h"
-#include "../src/core/MemoryMonitor.h"
+#include "VerseFinder.h"
+#include "PerformanceBenchmark.h"
+#include "MemoryMonitor.h"
 #include <iostream>
 #include <chrono>
 #include <thread>

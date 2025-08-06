@@ -123,37 +123,28 @@ if(APPLE)
     message(STATUS "Using macOS system OpenGL (no external loader needed)")
     
 elseif(WIN32)
-    # Windows - try to find GLEW, download if not found
-    find_package(GLEW QUIET)
+    # Windows - use built-in glad loader for better compatibility
+    message(STATUS "Using built-in OpenGL loader for Windows...")
     
-    if(NOT GLEW_FOUND AND PkgConfig_FOUND)
-        pkg_check_modules(GLEW QUIET glew)
-    endif()
+    set(OPENGL_LOADER_LIBRARIES "")
+    set(OPENGL_LOADER_INCLUDE_DIRS "")
+    set(OPENGL_LOADER_LINK_DIRS "")
+    set(OPENGL_LOADER_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GL3W)
     
-    if(NOT GLEW_FOUND)
-        message(STATUS "GLEW not found, downloading...")
-        FetchContent_Declare(
-            glew
-            GIT_REPOSITORY https://github.com/nigels-com/glew.git
-            GIT_TAG glew-2.2.0
-            SOURCE_SUBDIR build/cmake
-        )
-        
-        set(BUILD_UTILS OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable(glew)
-        
-        set(OPENGL_LOADER_LIBRARIES GLEW::GLEW)
-        set(OPENGL_LOADER_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GLEW)
-        message(STATUS "GLEW downloaded and configured")
-    else()
-        set(OPENGL_LOADER_LIBRARIES ${GLEW_LIBRARIES})
-        set(OPENGL_LOADER_INCLUDE_DIRS ${GLEW_INCLUDE_DIRS})
-        set(OPENGL_LOADER_LINK_DIRS ${GLEW_LIBRARY_DIRS})
-        set(OPENGL_LOADER_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GLEW)
-        message(STATUS "Found system GLEW")
-    endif()
+    # Download gl3w which is more reliable than GLEW on Windows
+    FetchContent_Declare(
+        gl3w
+        URL https://github.com/skaslev/gl3w/archive/refs/heads/master.zip
+    )
+    
+    FetchContent_MakeAvailable(gl3w)
+    
+    # Add gl3w to sources
+    list(APPEND IMGUI_SOURCES ${gl3w_SOURCE_DIR}/src/gl3w.c)
+    set(OPENGL_LOADER_INCLUDE_DIRS ${gl3w_SOURCE_DIR}/include)
     
     set(OPENGL_LOADER_FOUND TRUE)
+    message(STATUS "gl3w configured for Windows")
     
 else()
     # Linux and other Unix-like systems
@@ -542,6 +533,11 @@ foreach(UI_TEST_TARGET ${UI_TEST_EXECUTABLES})
     endif()
     if(OPENGL_LOADER_LINK_DIRS)
         target_link_directories(${UI_TEST_TARGET} PRIVATE ${OPENGL_LOADER_LINK_DIRS})
+    endif()
+    
+    # On macOS with custom loader, force include our OpenGL header for UI tests
+    if(APPLE AND OPENGL_LOADER_DEFINITIONS MATCHES "IMGUI_IMPL_OPENGL_LOADER_CUSTOM")
+        target_compile_options(${UI_TEST_TARGET} PRIVATE "-include${CMAKE_CURRENT_SOURCE_DIR}/src/opengl_loader.h")
     endif()
 endforeach()
 

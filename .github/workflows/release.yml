@@ -29,6 +29,8 @@ jobs:
                 build-essential \
                 cmake \
                 pkg-config \
+                libgl1-mesa-dev \
+                libglu1-mesa-dev \
                 libglfw3-dev \
                 libglew-dev \
                 nlohmann-json3-dev \

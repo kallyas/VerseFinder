@@ -1,7 +1,7 @@
-#include "src/core/VerseFinder.h"
-#include "src/core/TopicManager.h"
-#include "src/core/SearchAnalytics.h"
-#include "src/core/SemanticSearch.h"
+#include "VerseFinder.h"
+#include "TopicManager.h"
+#include "SearchAnalytics.h"
+#include "SemanticSearch.h"
 #include <iostream>
 #include <fstream>
 

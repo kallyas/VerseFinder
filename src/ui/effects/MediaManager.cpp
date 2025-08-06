@@ -336,7 +336,7 @@ float MediaManager::getVideoDuration() const {
 }
 
 // Live camera integration
-bool MediaManager::initializeCamera(int camera_index) {
+bool MediaManager::initializeCamera([[maybe_unused]] int camera_index) {
     // TODO: Implement camera initialization
     // This would involve platform-specific camera APIs
     camera_active = true;

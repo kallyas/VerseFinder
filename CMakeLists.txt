@@ -236,6 +236,7 @@ add_executable(VerseFinder
     src/ui/system/WindowManager.cpp
     src/ui/system/PlatformUtils.cpp
     src/ui/system/FileManager.cpp
+    src/ui/accessibility/AccessibilityManager.cpp
     src/ui/modals/SettingsModal.cpp
     src/ui/modals/TranslationManagerModal.cpp
     src/integrations/IntegrationManager.cpp

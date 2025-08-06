@@ -175,6 +175,13 @@ debug_multistep*
 test_expanded_navigation*
 test_full_navigation*
 test_bible.json
+# Test executables
+integration_test
+performance_test
+quick_test
+test_accessibility
+test_advanced_features
+validation_test
 
 # Profiling
 *.prof

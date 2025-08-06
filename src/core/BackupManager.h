@@ -26,11 +26,11 @@ public:
         is_initialized.store(false);
     }
 
-    bool createBackup(const std::string& backup_name = "") {
+    bool createBackup([[maybe_unused]] const std::string& backup_name = "") {
         return is_initialized.load();
     }
 
-    bool restoreBackup(const std::string& backup_name) {
+    bool restoreBackup([[maybe_unused]] const std::string& backup_name) {
         return is_initialized.load();
     }
 

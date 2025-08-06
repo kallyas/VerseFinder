@@ -98,7 +98,7 @@ void PresentationEffects::endTextEffects() {
 }
 
 // Individual effect rendering methods
-void PresentationEffects::renderDropShadow(const ImVec2& position, const ImVec2& size, const std::string& text, 
+void PresentationEffects::renderDropShadow(const ImVec2& position, [[maybe_unused]] const ImVec2& size, const std::string& text, 
                                          ImFont* font, float font_size) {
     if (!current_draw_list || !drop_shadow.enabled) return;
     
@@ -127,7 +127,7 @@ void PresentationEffects::renderDropShadow(const ImVec2& position, const ImVec2&
     }
 }
 
-void PresentationEffects::renderOutline(const ImVec2& position, const ImVec2& size, const std::string& text, 
+void PresentationEffects::renderOutline(const ImVec2& position, [[maybe_unused]] const ImVec2& size, const std::string& text, 
                                       ImFont* font, float font_size) {
     if (!current_draw_list || !outline.enabled) return;
     
@@ -147,7 +147,7 @@ void PresentationEffects::renderOutline(const ImVec2& position, const ImVec2& si
     }
 }
 
-void PresentationEffects::renderGlow(const ImVec2& position, const ImVec2& size, const std::string& text, 
+void PresentationEffects::renderGlow(const ImVec2& position, [[maybe_unused]] const ImVec2& size, const std::string& text, 
                                    ImFont* font, float font_size) {
     if (!current_draw_list || !glow.enabled) return;
     
@@ -165,7 +165,7 @@ void PresentationEffects::renderGlow(const ImVec2& position, const ImVec2& size,
     }
 }
 
-void PresentationEffects::renderGradientText(const ImVec2& position, const ImVec2& size, const std::string& text, 
+void PresentationEffects::renderGradientText(const ImVec2& position, [[maybe_unused]] const ImVec2& size, const std::string& text, 
                                            ImFont* font, float font_size) {
     if (!current_draw_list || !gradient.enabled) return;
     
@@ -179,7 +179,7 @@ void PresentationEffects::renderGradientText(const ImVec2& position, const ImVec
     ImGui::PopFont();
 }
 
-void PresentationEffects::renderStrokedText(const ImVec2& position, const ImVec2& size, const std::string& text, 
+void PresentationEffects::renderStrokedText(const ImVec2& position, [[maybe_unused]] const ImVec2& size, const std::string& text, 
                                           ImFont* font, float font_size) {
     if (!current_draw_list || !stroke.enabled) return;
     
@@ -244,7 +244,7 @@ void PresentationEffects::loadPreset(const std::string& preset_name) {
     }
 }
 
-void PresentationEffects::savePreset(const std::string& preset_name) {
+void PresentationEffects::savePreset([[maybe_unused]] const std::string& preset_name) {
     // TODO: Implement preset saving to file
     // For now, this is a placeholder for future implementation
 }

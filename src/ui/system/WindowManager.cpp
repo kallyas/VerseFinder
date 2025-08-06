@@ -18,7 +18,7 @@ void WindowManager::errorCallback(int error, const char* description) {
     std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
 
-void WindowManager::framebufferSizeCallback(GLFWwindow* window, int width, int height) {
+void WindowManager::framebufferSizeCallback([[maybe_unused]] GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 

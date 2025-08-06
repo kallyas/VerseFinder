@@ -652,7 +652,7 @@ bool CrashRecoverySystem::importSession(const std::string& import_path) {
     }
 }
 
-bool CrashRecoverySystem::upgradeSessionFormat(const std::string& session_id) {
+bool CrashRecoverySystem::upgradeSessionFormat([[maybe_unused]] const std::string& session_id) {
     // This would handle format upgrades between versions
     // For now, just return true since we're using version 1.0
     return true;

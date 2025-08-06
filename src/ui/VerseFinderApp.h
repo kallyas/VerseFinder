@@ -32,6 +32,7 @@
 #include "settings/ThemeManager.h"
 #include "system/FontManager.h"
 #include "system/WindowManager.h"
+#include "accessibility/AccessibilityManager.h"
 #include "modals/SettingsModal.h"
 #include "modals/TranslationManagerModal.h"
 #include <GLFW/glfw3.h>
@@ -126,6 +127,7 @@ private:
     std::unique_ptr<ThemeManager> theme_manager;
     std::unique_ptr<FontManager> font_manager;
     std::unique_ptr<WindowManager> window_manager;
+    std::unique_ptr<AccessibilityManager> accessibility_manager;
     std::unique_ptr<SettingsModal> settings_modal;
     std::unique_ptr<TranslationManagerModal> translation_manager_modal;
     

@@ -509,7 +509,7 @@ std::string SemanticSearch::exportSemanticConfig() const {
 }
 
 // Advanced pattern matching methods
-std::vector<std::string> SemanticSearch::searchWithWildcards(const std::string& pattern) const {
+std::vector<std::string> SemanticSearch::searchWithWildcards([[maybe_unused]] const std::string& pattern) const {
     std::vector<std::string> results;
     
     // This is a basic wildcard implementation

@@ -43,7 +43,7 @@ void ReliabilityManager::destroyInstance() {
     }
 }
 
-bool ReliabilityManager::initialize(const std::string& app_directory) {
+bool ReliabilityManager::initialize([[maybe_unused]] const std::string& app_directory) {
     if (is_initialized.load()) {
         return true; // Already initialized
     }

@@ -1410,7 +1410,7 @@ std::vector<std::string> VerseFinder::getPopularVerses(int count) const {
     return search_analytics.getMostPopularVerses(count);
 }
 
-std::vector<std::string> VerseFinder::getTrendingSearches(int days) const {
+std::vector<std::string> VerseFinder::getTrendingSearches([[maybe_unused]] int days) const {
     if (!analytics_enabled) return {};
     
     return search_analytics.getMostSearchedQueries(10); // Simplified implementation

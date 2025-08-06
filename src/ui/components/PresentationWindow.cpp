@@ -19,7 +19,7 @@ PresentationWindow::~PresentationWindow() {
     destroyPresentationWindow();
 }
 
-bool PresentationWindow::initPresentationWindow(GLFWwindow* main_window) {
+bool PresentationWindow::initPresentationWindow([[maybe_unused]] GLFWwindow* main_window) {
     if (presentation_window) {
         std::cerr << "Presentation window already exists!" << std::endl;
         return false;
@@ -243,7 +243,7 @@ void PresentationWindow::setupPresentationStyle() {
     ImGui::GetIO().FontGlobalScale = userSettings.presentation.fontSize / 16.0f;
 }
 
-void PresentationWindow::calculateTextLayout(const std::string& text, float& wrap_width) {
+void PresentationWindow::calculateTextLayout([[maybe_unused]] const std::string& text, [[maybe_unused]] float& wrap_width) {
     // This is a helper function to calculate optimal text layout
     // Currently just uses the provided wrap_width
     // Could be enhanced with more sophisticated layout calculations

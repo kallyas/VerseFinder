@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VerseFinder Mobile Companion</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a1a1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+    <div id="app">
+        <!-- Pairing Screen -->
+        <div id="pairingScreen" class="screen active">
+            <div class="container">
+                <div class="logo">
+                    <h1>📖 VerseFinder</h1>
+                    <p>Mobile Companion</p>
+                </div>
+                
+                <div class="pairing-form">
+                    <h2>Connect to VerseFinder</h2>
+                    <div class="input-group">
+                        <label for="serverAddress">Server Address</label>
+                        <input type="text" id="serverAddress" placeholder="192.168.1.100:8080" value="localhost:8080">
+                    </div>
+                    <div class="input-group">
+                        <label for="deviceName">Device Name</label>
+                        <input type="text" id="deviceName" placeholder="John's iPhone" value="">
+                    </div>
+                    <button id="connectBtn" class="primary-btn">Connect</button>
+                </div>
+                
+                <div id="pinEntry" class="pin-section hidden">
+                    <h3>Enter PIN displayed on VerseFinder</h3>
+                    <div class="pin-input">
+                        <input type="number" id="pinCode" placeholder="1234" maxlength="4">
+                    </div>
+                    <button id="validatePinBtn" class="primary-btn">Validate PIN</button>
+                </div>
+                
+                <div class="status-message" id="statusMessage"></div>
+            </div>
+        </div>
+        
+        <!-- Main Control Screen -->
+        <div id="controlScreen" class="screen">
+            <div class="header">
+                <h1>📖 VerseFinder</h1>
+                <div class="connection-status">
+                    <span id="connectionIndicator" class="status-dot"></span>
+                    <span id="deviceInfo"></span>
+                </div>
+            </div>
+            
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="search">Search</button>
+                <button class="tab-btn" data-tab="control">Control</button>
+                <button class="tab-btn" data-tab="favorites">Favorites</button>
+                <button class="tab-btn" data-tab="settings">Settings</button>
+            </div>
+            
+            <!-- Search Tab -->
+            <div id="searchTab" class="tab-content active">
+                <div class="search-section">
+                    <div class="input-group">
+                        <input type="text" id="searchInput" placeholder="Search verses or enter reference...">
+                        <button id="searchBtn">🔍</button>
+                    </div>
+                    
+                    <div class="translation-selector">
+                        <select id="translationSelect">
+                            <option value="KJV">King James Version</option>
+                            <option value="NIV">New International Version</option>
+                            <option value="ESV">English Standard Version</option>
+                        </select>
+                    </div>
+                    
+                    <div id="searchResults" class="results-list"></div>
+                </div>
+                
+                <div class="quick-access">
+                    <h3>Quick Access</h3>
+                    <div id="quickAccessVerses" class="verse-buttons"></div>
+                </div>
+            </div>
+            
+            <!-- Control Tab -->
+            <div id="controlTab" class="tab-content">
+                <div class="presentation-preview">
+                    <div id="currentVerse" class="current-verse">
+                        <div class="verse-text">No verse displayed</div>
+                        <div class="verse-reference"></div>
+                    </div>
+                </div>
+                
+                <div class="control-buttons">
+                    <div class="button-row">
+                        <button id="togglePresentationBtn" class="control-btn">
+                            <span class="icon">📺</span>
+                            <span class="label">Toggle Presentation</span>
+                        </button>
+                        <button id="blankScreenBtn" class="control-btn">
+                            <span class="icon">⬛</span>
+                            <span class="label">Blank Screen</span>
+                        </button>
+                    </div>
+                    
+                    <div class="button-row">
+                        <button id="previousVerseBtn" class="control-btn">
+                            <span class="icon">⬅️</span>
+                            <span class="label">Previous</span>
+                        </button>
+                        <button id="nextVerseBtn" class="control-btn">
+                            <span class="icon">➡️</span>
+                            <span class="label">Next</span>
+                        </button>
+                    </div>
+                    
+                    <div class="button-row">
+                        <button id="showLogoBtn" class="control-btn">
+                            <span class="icon">🏠</span>
+                            <span class="label">Show Logo</span>
+                        </button>
+                        <button id="emergencyBtn" class="control-btn emergency">
+                            <span class="icon">🚨</span>
+                            <span class="label">Emergency</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="presentation-settings">
+                    <h3>Presentation Settings</h3>
+                    <div class="setting-row">
+                        <label for="textSize">Text Size</label>
+                        <input type="range" id="textSize" min="0.5" max="2" step="0.1" value="1">
+                    </div>
+                    <div class="setting-row">
+                        <label for="backgroundTheme">Theme</label>
+                        <select id="backgroundTheme">
+                            <option value="default">Default</option>
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                            <option value="blue">Blue</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Favorites Tab -->
+            <div id="favoritesTab" class="tab-content">
+                <div class="favorites-list">
+                    <h3>Your Favorites</h3>
+                    <div id="favoriteVerses" class="verse-list"></div>
+                </div>
+                
+                <div class="emergency-access">
+                    <h3>Emergency Verses</h3>
+                    <div id="emergencyVerses" class="verse-buttons"></div>
+                </div>
+            </div>
+            
+            <!-- Settings Tab -->
+            <div id="settingsTab" class="tab-content">
+                <div class="settings-list">
+                    <h3>App Settings</h3>
+                    
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <input type="checkbox" id="vibrationEnabled" checked>
+                            <span class="checkmark"></span>
+                            Vibration Feedback
+                        </label>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <input type="checkbox" id="soundEnabled" checked>
+                            <span class="checkmark"></span>
+                            Sound Effects
+                        </label>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <input type="checkbox" id="showPreview" checked>
+                            <span class="checkmark"></span>
+                            Show Presentation Preview
+                        </label>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="appTheme">App Theme</label>
+                        <select id="appTheme">
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                            <option value="auto">Auto</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="fontSize">Font Size</label>
+                        <select id="fontSize">
+                            <option value="small">Small</option>
+                            <option value="medium">Medium</option>
+                            <option value="large" selected>Large</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="device-info">
+                    <h3>Device Information</h3>
+                    <div class="info-item">
+                        <span class="label">Device ID:</span>
+                        <span id="deviceId">Not connected</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Permission Level:</span>
+                        <span id="permissionLevel">User</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Server:</span>
+                        <span id="serverInfo">Not connected</span>
+                    </div>
+                </div>
+                
+                <div class="danger-zone">
+                    <h3>Danger Zone</h3>
+                    <button id="disconnectBtn" class="danger-btn">Disconnect Device</button>
+                    <button id="resetAppBtn" class="danger-btn">Reset App</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

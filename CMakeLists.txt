@@ -251,6 +251,8 @@ add_executable(VerseFinder
     src/integrations/PlanningCenterProvider.cpp
     src/service/ServicePlan.cpp
     src/api/ApiServer.cpp
+    src/api/WebSocketServer.cpp
+    src/api/MobileAPI.cpp
     ${IMGUI_SOURCES}
 )
 
@@ -343,10 +345,8 @@ set(GENTIUM_FONT_PATH "${FONT_BASE_PATH}/Gentium_Plus/GentiumPlus-Regular.ttf")
 # Create translations directory structure
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/translations)
 
-# Copy bible.json if it exists (for backward compatibility)
-if(EXISTS ${CMAKE_SOURCE_DIR}/bible.json)
-    file(COPY bible.json DESTINATION ${CMAKE_BINARY_DIR})
-endif()
+# Copy mobile companion app to build directory
+file(COPY mobile/ DESTINATION ${CMAKE_BINARY_DIR}/mobile)
 
 # Test executables
 enable_testing()

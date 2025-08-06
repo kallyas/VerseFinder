@@ -25,6 +25,8 @@
 #include "../integrations/IntegrationManager.h"
 #include "../service/ServicePlan.h"
 #include "../api/ApiServer.h"
+#include "../api/WebSocketServer.h"
+#include "../api/MobileAPI.h"
 #include "../plugins/manager/PluginManager.h"
 #include "components/SearchComponent.h"
 #include "components/TranslationSelector.h"
@@ -116,6 +118,8 @@ private:
     
     // API server
     std::unique_ptr<ApiServer> api_server;
+    std::unique_ptr<WebSocketServer> websocket_server;
+    std::unique_ptr<MobileAPI> mobile_api;
     bool api_server_enabled = false;
     
     // Plugin system
@@ -150,6 +154,17 @@ private:
     
     // API server setup
     void setupApiRoutes();
+    void setupMobileAPI();
+    
+    // Presentation control methods for mobile API
+    bool isPresentationModeActive() const;
+    std::string getCurrentDisplayedVerse() const;
+    std::string getCurrentDisplayedReference() const;
+    bool isPresentationBlank() const;
+    void displayVerseOnPresentation(const std::string& verse_text, const std::string& reference);
+    void setPresentationTheme(const std::string& theme);
+    void setPresentationTextSize(float size_multiplier);
+    void setPresentationTextPosition(const std::string& position);
     
     // Plugin system setup
     void initializePluginSystem();
@@ -196,7 +211,6 @@ private:
     void renderPresentationWindow();
     void renderPresentationPreview();
     void togglePresentationMode();
-    void displayVerseOnPresentation(const std::string& verse_text, const std::string& reference);
     void clearPresentationDisplay();
     void toggleBlankScreen();
     bool isPresentationWindowActive() const;

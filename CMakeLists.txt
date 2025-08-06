@@ -190,6 +190,11 @@ include_directories(
     src/integrations
     src/service
     src/api
+    src/plugins
+    src/plugins/interfaces
+    src/plugins/api
+    src/plugins/manager
+    src/plugins/security
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
     ${OPENGL_LOADER_INCLUDE_DIRS}
@@ -239,6 +244,9 @@ add_executable(VerseFinder
     src/ui/accessibility/AccessibilityManager.cpp
     src/ui/modals/SettingsModal.cpp
     src/ui/modals/TranslationManagerModal.cpp
+    src/ui/components/PluginManagerWindow.cpp
+    src/plugins/manager/PluginManager.cpp
+    src/plugins/security/PluginSecurity.cpp
     src/integrations/IntegrationManager.cpp
     src/integrations/PlanningCenterProvider.cpp
     src/service/ServicePlan.cpp

@@ -25,6 +25,7 @@
 #include "../integrations/IntegrationManager.h"
 #include "../service/ServicePlan.h"
 #include "../api/ApiServer.h"
+#include "../plugins/manager/PluginManager.h"
 #include "components/SearchComponent.h"
 #include "components/TranslationSelector.h"
 #include "components/TranslationComparison.h"
@@ -116,6 +117,11 @@ private:
     // API server
     std::unique_ptr<ApiServer> api_server;
     bool api_server_enabled = false;
+    
+    // Plugin system
+    std::unique_ptr<PluginSystem::PluginManager> plugin_manager;
+    bool plugins_enabled = true;
+    
     float splash_progress = 0.0f;
     std::string splash_status = "Initializing...";
     
@@ -140,9 +146,14 @@ private:
     bool show_memory_window = false;
     bool show_integrations_window = false;
     bool show_comparison_window = false;
+    bool show_plugin_manager_window = false;
     
     // API server setup
     void setupApiRoutes();
+    
+    // Plugin system setup
+    void initializePluginSystem();
+    void shutdownPluginSystem();
     
     // Available translations for download
     std::vector<AvailableTranslation> available_translations = {
@@ -177,6 +188,7 @@ private:
     void renderPerformanceWindow();
     void renderMemoryWindow();
     void renderComparisonWindow();
+    void renderPluginManagerWindow();
     
     // Presentation mode methods
     void initPresentationWindow();

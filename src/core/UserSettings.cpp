@@ -131,6 +131,44 @@ void from_json(const json& j, PresentationSettings& settings) {
     if (j.contains("textPadding")) j.at("textPadding").get_to(settings.textPadding);
 }
 
+// AccessibilitySettings JSON serialization
+void to_json(json& j, const AccessibilitySettings& settings) {
+    j = json{
+        {"high_contrast_enabled", settings.high_contrast_enabled},
+        {"large_text_enabled", settings.large_text_enabled},
+        {"screen_reader_enabled", settings.screen_reader_enabled},
+        {"voice_commands_enabled", settings.voice_commands_enabled},
+        {"audio_feedback_enabled", settings.audio_feedback_enabled},
+        {"enhanced_keyboard_nav", settings.enhanced_keyboard_nav},
+        {"focus_indicators_enabled", settings.focus_indicators_enabled},
+        {"font_scale_factor", settings.font_scale_factor},
+        {"speech_rate", settings.speech_rate},
+        {"audio_volume", settings.audio_volume},
+        {"preferred_voice", settings.preferred_voice},
+        {"contrast_theme", settings.contrast_theme},
+        {"custom_shortcuts", settings.custom_shortcuts}
+    };
+}
+
+void from_json(const json& j, AccessibilitySettings& settings) {
+    // Use default values and only update if key exists
+    settings = AccessibilitySettings{}; // Start with defaults
+    
+    if (j.contains("high_contrast_enabled")) j.at("high_contrast_enabled").get_to(settings.high_contrast_enabled);
+    if (j.contains("large_text_enabled")) j.at("large_text_enabled").get_to(settings.large_text_enabled);
+    if (j.contains("screen_reader_enabled")) j.at("screen_reader_enabled").get_to(settings.screen_reader_enabled);
+    if (j.contains("voice_commands_enabled")) j.at("voice_commands_enabled").get_to(settings.voice_commands_enabled);
+    if (j.contains("audio_feedback_enabled")) j.at("audio_feedback_enabled").get_to(settings.audio_feedback_enabled);
+    if (j.contains("enhanced_keyboard_nav")) j.at("enhanced_keyboard_nav").get_to(settings.enhanced_keyboard_nav);
+    if (j.contains("focus_indicators_enabled")) j.at("focus_indicators_enabled").get_to(settings.focus_indicators_enabled);
+    if (j.contains("font_scale_factor")) j.at("font_scale_factor").get_to(settings.font_scale_factor);
+    if (j.contains("speech_rate")) j.at("speech_rate").get_to(settings.speech_rate);
+    if (j.contains("audio_volume")) j.at("audio_volume").get_to(settings.audio_volume);
+    if (j.contains("preferred_voice")) j.at("preferred_voice").get_to(settings.preferred_voice);
+    if (j.contains("contrast_theme")) j.at("contrast_theme").get_to(settings.contrast_theme);
+    if (j.contains("custom_shortcuts")) j.at("custom_shortcuts").get_to(settings.custom_shortcuts);
+}
+
 // UserSettings JSON serialization
 void to_json(json& j, const UserSettings& settings) {
     j = json{
@@ -138,7 +176,8 @@ void to_json(json& j, const UserSettings& settings) {
         {"display", settings.display},
         {"search", settings.search},
         {"content", settings.content},
-        {"presentation", settings.presentation}
+        {"presentation", settings.presentation},
+        {"accessibility", settings.accessibility}
     };
 }
 
@@ -154,6 +193,14 @@ void from_json(const json& j, UserSettings& settings) {
     } else {
         // Use default values if not present in old settings
         settings.presentation = PresentationSettings{};
+    }
+    
+    // Handle accessibility settings with backwards compatibility
+    if (j.contains("accessibility")) {
+        j.at("accessibility").get_to(settings.accessibility);
+    } else {
+        // Use default values if not present in old settings
+        settings.accessibility = AccessibilitySettings{};
     }
 }
 

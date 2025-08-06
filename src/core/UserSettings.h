@@ -65,11 +65,32 @@ struct PresentationSettings {
     float textPadding = 40.0f; // pixels from edge
 };
 
+struct AccessibilitySettings {
+    bool high_contrast_enabled = false;
+    bool large_text_enabled = false;
+    bool screen_reader_enabled = false;
+    bool voice_commands_enabled = false;
+    bool audio_feedback_enabled = false;
+    bool enhanced_keyboard_nav = true;
+    bool focus_indicators_enabled = true;
+    
+    float font_scale_factor = 1.0f;  // 1.0 = normal, 2.0 = double size, etc.
+    float speech_rate = 1.0f;        // TTS speech rate
+    float audio_volume = 0.7f;       // Audio feedback volume
+    
+    std::string preferred_voice = "default";
+    std::string contrast_theme = "high_contrast_dark";
+    
+    // Keyboard shortcuts customization
+    std::unordered_map<std::string, std::string> custom_shortcuts;
+};
+
 struct UserSettings {
     DisplaySettings display;
     SearchSettings search;
     ContentSettings content;
     PresentationSettings presentation;
+    AccessibilitySettings accessibility;
     std::string version = "1.0";
     
     // Serialization methods
@@ -100,6 +121,9 @@ void from_json(const json& j, ContentSettings& settings);
 
 void to_json(json& j, const PresentationSettings& settings);
 void from_json(const json& j, PresentationSettings& settings);
+
+void to_json(json& j, const AccessibilitySettings& settings);
+void from_json(const json& j, AccessibilitySettings& settings);
 
 void to_json(json& j, const UserSettings& settings);
 void from_json(const json& j, UserSettings& settings);

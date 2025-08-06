@@ -41,6 +41,7 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     theme_manager = std::make_unique<ThemeManager>();
     font_manager = std::make_unique<FontManager>();
     window_manager = std::make_unique<WindowManager>();
+    accessibility_manager = std::make_unique<AccessibilityManager>();
     presentation_window_component = std::make_unique<PresentationWindow>(userSettings);
     translation_comparison = std::make_unique<TranslationComparison>();
 }
@@ -120,8 +121,85 @@ bool VerseFinderApp::init() {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     
-    // Setup style
-    theme_manager->setupImGuiStyle(userSettings.display.colorTheme, userSettings.display.fontSize / 16.0f);
+    // Initialize accessibility manager
+    accessibility_manager->initialize();
+    accessibility_manager->setupImGuiAccessibility(ImGui::GetCurrentContext());
+    
+    // Register voice commands
+    accessibility_manager->registerVoiceCommand(VoiceCommand::SEARCH_VERSE, [this](const std::string& input) {
+        // Extract verse reference from voice input and perform search
+        std::string query = input;
+        // Simple pattern extraction - remove "search for", "find", "go to" etc.
+        std::regex pattern(R"((search for|find|go to|show)\s*(.+))");
+        std::smatch match;
+        if (std::regex_search(query, match, pattern) && match.size() > 2) {
+            query = match[2].str();
+        }
+        
+        strncpy(search_input, query.c_str(), sizeof(search_input) - 1);
+        search_input[sizeof(search_input) - 1] = '\0';
+        performSearch();
+        
+        if (accessibility_manager->isFeatureEnabled(AccessibilityFeature::SCREEN_READER)) {
+            accessibility_manager->announceAction("Searching for " + query);
+        }
+    });
+    
+    accessibility_manager->registerVoiceCommand(VoiceCommand::PRESENTATION_MODE, [this](const std::string&) {
+        togglePresentationMode();
+        if (accessibility_manager->isFeatureEnabled(AccessibilityFeature::SCREEN_READER)) {
+            accessibility_manager->announceAction(isPresentationWindowActive() ? 
+                "Presentation mode activated" : "Presentation mode deactivated");
+        }
+    });
+    
+    accessibility_manager->registerVoiceCommand(VoiceCommand::BLANK_SCREEN, [this](const std::string&) {
+        if (isPresentationWindowActive()) {
+            toggleBlankScreen();
+            if (accessibility_manager->isFeatureEnabled(AccessibilityFeature::SCREEN_READER)) {
+                accessibility_manager->announceAction(presentation_blank_screen ? 
+                    "Screen blanked" : "Screen unblanked");
+            }
+        }
+    });
+    
+    accessibility_manager->registerVoiceCommand(VoiceCommand::SHOW_VERSE, [this](const std::string&) {
+        if (isPresentationWindowActive() && !selected_verse_text.empty()) {
+            std::string verse_text = formatVerseText(selected_verse_text);
+            std::string reference = formatVerseReference(selected_verse_text);
+            displayVerseOnPresentation(verse_text, reference);
+            
+            if (accessibility_manager->isFeatureEnabled(AccessibilityFeature::SCREEN_READER)) {
+                accessibility_manager->announceVerseText(verse_text, reference);
+            }
+        }
+    });
+    
+    accessibility_manager->registerVoiceCommand(VoiceCommand::HELP, [this](const std::string&) {
+        show_help_window = true;
+        if (accessibility_manager->isFeatureEnabled(AccessibilityFeature::SCREEN_READER)) {
+            accessibility_manager->announceAction("Help window opened");
+        }
+    });
+    
+    accessibility_manager->registerVoiceCommand(VoiceCommand::SETTINGS, [this](const std::string&) {
+        show_settings_window = true;
+        if (accessibility_manager->isFeatureEnabled(AccessibilityFeature::SCREEN_READER)) {
+            accessibility_manager->announceAction("Settings window opened");
+        }
+    });
+    
+    // Apply accessibility settings to UI
+    if (userSettings.accessibility.high_contrast_enabled) {
+        accessibility_manager->applyHighContrastTheme();
+    } else {
+        // Setup style
+        theme_manager->setupImGuiStyle(userSettings.display.colorTheme, userSettings.display.fontSize / 16.0f);
+    }
+    
+    // Apply font scaling for accessibility
+    float fontScale = userSettings.accessibility.large_text_enabled ? 
+                     userSettings.accessibility.font_scale_factor : 1.0f;
     
     // Apply additional styling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -372,8 +450,14 @@ void VerseFinderApp::run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         
-        // Handle keyboard shortcuts
-        handleKeyboardShortcuts();
+        // Update accessibility manager
+        accessibility_manager->update();
+        
+        // Handle accessibility keyboard shortcuts first
+        if (!accessibility_manager->handleAccessibilityKeyInput()) {
+            // Handle regular keyboard shortcuts
+            handleKeyboardShortcuts();
+        }
         
         // Create main window
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -489,6 +573,9 @@ void VerseFinderApp::run() {
         if (translation_manager_modal) {
             translation_manager_modal->render();
         }
+        
+        // Render accessibility overlay (voice recognition indicator, etc.)
+        accessibility_manager->renderAccessibilityOverlay();
         
         // Rendering
         ImGui::Render();

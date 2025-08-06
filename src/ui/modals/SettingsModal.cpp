@@ -36,6 +36,11 @@ void SettingsModal::render(bool& show_window) {
                 ImGui::EndTabItem();
             }
             
+            if (ImGui::BeginTabItem("Accessibility")) {
+                renderAccessibilityTab();
+                ImGui::EndTabItem();
+            }
+            
             ImGui::EndTabBar();
         }
         
@@ -328,4 +333,123 @@ void SettingsModal::fetchAvailableTranslations() {
 
 void SettingsModal::refreshTranslationsList() {
     fetchAvailableTranslations();
+}
+
+void SettingsModal::renderAccessibilityTab() {
+    ImGui::Text("Visual Accessibility");
+    ImGui::Separator();
+    
+    bool high_contrast = userSettings.accessibility.high_contrast_enabled;
+    if (ImGui::Checkbox("High Contrast Mode", &high_contrast)) {
+        userSettings.accessibility.high_contrast_enabled = high_contrast;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("?##hc_help")) {
+        ImGui::SetTooltip("Enable high contrast colors for better visibility");
+    }
+    
+    bool large_text = userSettings.accessibility.large_text_enabled;
+    if (ImGui::Checkbox("Large Text Mode", &large_text)) {
+        userSettings.accessibility.large_text_enabled = large_text;
+    }
+    
+    if (large_text) {
+        ImGui::Text("Font Scale Factor:");
+        ImGui::SliderFloat("##font_scale", &userSettings.accessibility.font_scale_factor, 1.0f, 3.0f, "%.1fx");
+    }
+    
+    bool focus_indicators = userSettings.accessibility.focus_indicators_enabled;
+    if (ImGui::Checkbox("Focus Indicators", &focus_indicators)) {
+        userSettings.accessibility.focus_indicators_enabled = focus_indicators;
+    }
+    
+    ImGui::Spacing();
+    ImGui::Text("High Contrast Theme:");
+    const char* themes[] = { "High Contrast Dark", "High Contrast Light" };
+    const char* theme_values[] = { "high_contrast_dark", "high_contrast_light" };
+    int current_theme = 0;
+    for (int i = 0; i < 2; i++) {
+        if (userSettings.accessibility.contrast_theme == theme_values[i]) {
+            current_theme = i;
+            break;
+        }
+    }
+    
+    if (ImGui::Combo("##contrast_theme", &current_theme, themes, 2)) {
+        userSettings.accessibility.contrast_theme = theme_values[current_theme];
+    }
+    
+    ImGui::Spacing();
+    ImGui::Text("Motor Accessibility");
+    ImGui::Separator();
+    
+    bool enhanced_keyboard = userSettings.accessibility.enhanced_keyboard_nav;
+    if (ImGui::Checkbox("Enhanced Keyboard Navigation", &enhanced_keyboard)) {
+        userSettings.accessibility.enhanced_keyboard_nav = enhanced_keyboard;
+    }
+    
+    ImGui::Spacing();
+    ImGui::Text("Audio & Voice");
+    ImGui::Separator();
+    
+    bool screen_reader = userSettings.accessibility.screen_reader_enabled;
+    if (ImGui::Checkbox("Screen Reader Support (Text-to-Speech)", &screen_reader)) {
+        userSettings.accessibility.screen_reader_enabled = screen_reader;
+    }
+    
+    bool voice_commands = userSettings.accessibility.voice_commands_enabled;
+    if (ImGui::Checkbox("Voice Commands", &voice_commands)) {
+        userSettings.accessibility.voice_commands_enabled = voice_commands;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("?##vc_help")) {
+        ImGui::SetTooltip("Enable voice control for hands-free operation\nCommands: 'Search for John 3:16', 'Presentation mode', 'Blank screen'");
+    }
+    
+    bool audio_feedback = userSettings.accessibility.audio_feedback_enabled;
+    if (ImGui::Checkbox("Audio Feedback", &audio_feedback)) {
+        userSettings.accessibility.audio_feedback_enabled = audio_feedback;
+    }
+    
+    if (screen_reader || audio_feedback) {
+        ImGui::Spacing();
+        ImGui::Text("Speech Settings:");
+        ImGui::SliderFloat("Speech Rate", &userSettings.accessibility.speech_rate, 0.5f, 2.0f, "%.1fx");
+        ImGui::SliderFloat("Audio Volume", &userSettings.accessibility.audio_volume, 0.0f, 1.0f, "%.2f");
+    }
+    
+    ImGui::Spacing();
+    ImGui::Text("Keyboard Shortcuts");
+    ImGui::Separator();
+    
+    if (ImGui::CollapsingHeader("Voice Control Shortcuts")) {
+        ImGui::BulletText("Ctrl+Alt+V: Toggle voice recognition");
+        ImGui::BulletText("Ctrl+Alt+S: Speak current context");
+    }
+    
+    if (ImGui::CollapsingHeader("Voice Commands")) {
+        ImGui::BulletText("\"Search for [verse]\" - Search for a verse");
+        ImGui::BulletText("\"Go to [reference]\" - Navigate to verse");
+        ImGui::BulletText("\"Next verse\" / \"Previous verse\" - Navigate");
+        ImGui::BulletText("\"Presentation mode\" - Toggle presentation");
+        ImGui::BulletText("\"Blank screen\" - Toggle blank screen");
+        ImGui::BulletText("\"Show verse\" - Display current verse");
+        ImGui::BulletText("\"Help\" - Open help window");
+        ImGui::BulletText("\"Settings\" - Open settings window");
+    }
+    
+    ImGui::Spacing();
+    if (ImGui::Button("Test Voice Recognition")) {
+        // This would trigger a test of voice recognition
+        ImGui::OpenPopup("Voice Test");
+    }
+    
+    if (ImGui::BeginPopupModal("Voice Test", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Voice recognition testing is not fully implemented yet.");
+        ImGui::Text("This feature will be available in the full implementation.");
+        if (ImGui::Button("OK")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 }

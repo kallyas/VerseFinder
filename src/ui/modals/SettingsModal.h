@@ -51,6 +51,7 @@ private:
     void renderTranslationsTab();
     void renderAppearanceTab();
     void renderContentTab();
+    void renderAccessibilityTab();
     
     // Settings sections
     void renderFontSettings();

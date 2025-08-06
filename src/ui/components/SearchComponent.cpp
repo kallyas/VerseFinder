@@ -5,11 +5,10 @@
 
 SearchComponent::SearchComponent(VerseFinder* verse_finder)
     : verse_finder(verse_finder)
-    , show_autocomplete(false)
     , fuzzy_search_enabled(true)
     , incremental_search_enabled(true)
-    , search_input_focused(false)
-    , show_advanced_suggestions(false) {
+    , show_advanced_suggestions(false)
+    , search_input_focused(false) {
     
     memset(search_input, 0, sizeof(search_input));
 }
@@ -337,7 +336,7 @@ void SearchComponent::showTopicSuggestions() {
     }
 }
 
-void SearchComponent::showRelatedQueries(const std::string& query) {
+void SearchComponent::showRelatedQueries([[maybe_unused]] const std::string& query) {
     if (verse_finder && verse_finder->areAnalyticsEnabled()) {
         related_queries = verse_finder->getPersonalizedSuggestions();
         show_advanced_suggestions = true;

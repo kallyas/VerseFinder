@@ -198,7 +198,7 @@ bool VerseFinderApp::init() {
     }
     
     // Apply font scaling for accessibility
-    float fontScale = userSettings.accessibility.large_text_enabled ? 
+    [[maybe_unused]] float fontScale = userSettings.accessibility.large_text_enabled ? 
                      userSettings.accessibility.font_scale_factor : 1.0f;
     
     // Apply additional styling

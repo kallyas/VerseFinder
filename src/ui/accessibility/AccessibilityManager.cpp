@@ -397,7 +397,7 @@ bool AccessibilityManager::isSpeaking() const {
 }
 
 // Audio feedback implementations
-void AccessibilityManager::playFeedbackSound(const std::string& action) {
+void AccessibilityManager::playFeedbackSound([[maybe_unused]] const std::string& action) {
     if (!settings.audio_feedback_enabled) {
         return;
     }
@@ -590,7 +590,7 @@ void AccessibilityManager::announceCurrentContext() {
     announceText(context);
 }
 
-void AccessibilityManager::setScreenReaderText(const std::string& element_id, const std::string& text) {
+void AccessibilityManager::setScreenReaderText([[maybe_unused]] const std::string& element_id, [[maybe_unused]] const std::string& text) {
     // Store screen reader text for elements
     // This would be expanded in a full implementation
 }
@@ -600,7 +600,7 @@ std::string AccessibilityManager::getScreenReaderText(const std::string& element
     return element_id; // Simple fallback
 }
 
-void AccessibilityManager::setupImGuiAccessibility(ImGuiContext* context) {
+void AccessibilityManager::setupImGuiAccessibility([[maybe_unused]] ImGuiContext* context) {
     // Setup ImGui for accessibility
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;

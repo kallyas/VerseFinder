@@ -29,7 +29,7 @@ void CrossReferenceSystem::initializeParallelPassages() {
 
 std::vector<CrossReference> CrossReferenceSystem::findCrossReferences(
     const std::string& verseKey, 
-    const std::unordered_map<std::string, std::string>& allVerses) const {
+    [[maybe_unused]] const std::unordered_map<std::string, std::string>& allVerses) const {
     
     std::vector<CrossReference> results;
     
@@ -43,7 +43,7 @@ std::vector<CrossReference> CrossReferenceSystem::findCrossReferences(
 
 std::vector<std::string> CrossReferenceSystem::findParallelPassages(
     const std::string& verseKey,
-    const std::unordered_map<std::string, std::string>& allVerses) const {
+    [[maybe_unused]] const std::unordered_map<std::string, std::string>& allVerses) const {
     
     std::vector<std::string> results;
     
@@ -56,8 +56,8 @@ std::vector<std::string> CrossReferenceSystem::findParallelPassages(
 }
 
 std::vector<std::string> CrossReferenceSystem::findThematicMatches(
-    const std::string& verseKey,
-    const std::unordered_map<std::string, std::string>& allVerses) const {
+    [[maybe_unused]] const std::string& verseKey,
+    [[maybe_unused]] const std::unordered_map<std::string, std::string>& allVerses) const {
     
     std::vector<std::string> results;
     // Basic implementation - would be enhanced with actual thematic analysis
@@ -65,7 +65,7 @@ std::vector<std::string> CrossReferenceSystem::findThematicMatches(
 }
 
 std::vector<std::string> CrossReferenceSystem::expandContext(
-    const std::string& verseKey, int beforeCount, int afterCount) const {
+    [[maybe_unused]] const std::string& verseKey, [[maybe_unused]] int beforeCount, [[maybe_unused]] int afterCount) const {
     
     std::vector<std::string> context;
     // Basic implementation - would parse verse key and find surrounding verses
@@ -79,21 +79,21 @@ std::vector<std::string> CrossReferenceSystem::getSurroundingVerses(
 }
 
 std::string CrossReferenceSystem::determineRelationshipType(
-    const std::string& verse1, const std::string& verse2) const {
+    [[maybe_unused]] const std::string& verse1, [[maybe_unused]] const std::string& verse2) const {
     
     // Basic implementation
     return "thematic";
 }
 
 double CrossReferenceSystem::calculateSimilarity(
-    const std::string& text1, const std::string& text2) const {
+    [[maybe_unused]] const std::string& text1, [[maybe_unused]] const std::string& text2) const {
     
     // Basic similarity calculation
     return 0.5;
 }
 
 std::vector<std::string> CrossReferenceSystem::extractThemes(
-    const std::string& verseText) const {
+    [[maybe_unused]] const std::string& verseText) const {
     
     std::vector<std::string> themes;
     // Basic theme extraction

@@ -55,7 +55,6 @@ private:
     // Auto-complete
     std::vector<FuzzyMatch> book_suggestions;
     std::vector<std::string> query_suggestions;
-    bool show_autocomplete;
     
     // Search settings
     bool fuzzy_search_enabled;

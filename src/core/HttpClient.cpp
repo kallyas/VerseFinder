@@ -39,7 +39,7 @@ size_t HttpClient::WriteFileCallback(void* contents, size_t size, size_t nmemb, 
     return fwrite(contents, size, nmemb, userp);
 }
 
-int HttpClient::CurlProgressCallback(void* clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
+int HttpClient::CurlProgressCallback(void* clientp, double dltotal, double dlnow, [[maybe_unused]] double ultotal, [[maybe_unused]] double ulnow) {
     if (clientp && dltotal > 0) {
         auto* callback = static_cast<ProgressCallback*>(clientp);
         if (*callback) {

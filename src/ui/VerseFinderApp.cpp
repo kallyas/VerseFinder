@@ -36,6 +36,8 @@ VerseFinderApp::VerseFinderApp() : window(nullptr), presentation_window(nullptr)
     
     // Initialize API server
     api_server = std::make_unique<ApiServer>();
+    websocket_server = std::make_unique<WebSocketServer>();
+    mobile_api = std::make_unique<MobileAPI>(&bible, this);
     setupApiRoutes();
     
     // Initialize UI components
@@ -307,6 +309,9 @@ bool VerseFinderApp::init() {
     if (api_server_enabled) {
         if (!api_server->start(8080)) {
             std::cerr << "Failed to start API server" << std::endl;
+        } else {
+            // Setup mobile API with WebSocket server
+            setupMobileAPI();
         }
     }
     
@@ -316,6 +321,13 @@ bool VerseFinderApp::init() {
 void VerseFinderApp::setupApiRoutes() {
     // Enable CORS for web browser access
     api_server->enableCors("*");
+    
+    // Setup mobile API routes
+    mobile_api->setupApiRoutes(api_server.get());
+    mobile_api->setupWebSocketHandlers(websocket_server.get());
+    
+    // Mobile companion app static file routes
+    setupMobileFileRoutes();
     
     // Search endpoint
     // Examples: 
@@ -446,6 +458,88 @@ void VerseFinderApp::setupApiRoutes() {
         
         return jsonResponse(json);
     });
+}
+
+void VerseFinderApp::setupMobileFileRoutes() {
+    // Serve mobile companion app static files
+    
+    // Main mobile app page - serve index.html for /mobile/ and /mobile
+    api_server->addRoute(HttpMethod::GET, "/mobile/", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("index.html");
+    });
+    
+    api_server->addRoute(HttpMethod::GET, "/mobile", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("index.html");
+    });
+    
+    // CSS files
+    api_server->addRoute(HttpMethod::GET, "/mobile/style.css", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("style.css");
+    });
+    
+    // JavaScript files
+    api_server->addRoute(HttpMethod::GET, "/mobile/app.js", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("app.js");
+    });
+    
+    // Service worker
+    api_server->addRoute(HttpMethod::GET, "/mobile/sw.js", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("sw.js");
+    });
+    
+    // PWA manifest
+    api_server->addRoute(HttpMethod::GET, "/mobile/manifest.json", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("manifest.json");
+    });
+    
+    // Demo page
+    api_server->addRoute(HttpMethod::GET, "/mobile/demo.html", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("demo.html");
+    });
+    
+    // README
+    api_server->addRoute(HttpMethod::GET, "/mobile/README.md", [this](const ApiRequest& req) -> ApiResponse {
+        return serveMobileFile("README.md");
+    });
+}
+
+ApiResponse VerseFinderApp::serveMobileFile(const std::string& filename) {
+    // Construct the full path to the mobile file
+    std::string mobile_dir = "mobile/";
+    std::string file_path = mobile_dir + filename;
+    
+    // Check if file exists and read it
+    std::ifstream file(file_path, std::ios::binary);
+    if (!file.is_open()) {
+        return errorResponse(404, "Mobile app file not found: " + filename);
+    }
+    
+    // Read file content
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+    
+    // Determine content type based on file extension
+    std::string content_type = "text/plain";
+    if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".html") {
+        content_type = "text/html";
+    } else if (filename.length() >= 4 && filename.substr(filename.length() - 4) == ".css") {
+        content_type = "text/css";
+    } else if (filename.length() >= 3 && filename.substr(filename.length() - 3) == ".js") {
+        content_type = "application/javascript";
+    } else if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".json") {
+        content_type = "application/json";
+    } else if (filename.length() >= 3 && filename.substr(filename.length() - 3) == ".md") {
+        content_type = "text/markdown";
+    }
+    
+    // Create response
+    ApiResponse response;
+    response.status_code = 200;
+    response.headers["Content-Type"] = content_type;
+    response.headers["Cache-Control"] = "no-cache"; // Ensure fresh content during development
+    response.body = content;
+    
+    return response;
 }
 
 void VerseFinderApp::run() {
@@ -2992,13 +3086,6 @@ void VerseFinderApp::togglePresentationMode() {
     }
 }
 
-void VerseFinderApp::displayVerseOnPresentation(const std::string& verse_text, const std::string& reference) {
-    current_displayed_verse = verse_text;
-    current_displayed_reference = reference;
-    presentation_blank_screen = false;
-    presentation_fade_alpha = 1.0f;
-}
-
 void VerseFinderApp::clearPresentationDisplay() {
     current_displayed_verse.clear();
     current_displayed_reference.clear();
@@ -3461,5 +3548,82 @@ void VerseFinderApp::shutdownPluginSystem() {
     if (plugin_manager) {
         plugin_manager->shutdown();
         plugin_manager.reset();
+    }
+}
+
+// Mobile API integration methods
+void VerseFinderApp::setupMobileAPI() {
+    if (api_server_enabled && api_server && websocket_server && mobile_api) {
+        // Start WebSocket server on port 8081
+        if (websocket_server->start(8081)) {
+            std::cout << "WebSocket server started for mobile companion" << std::endl;
+        } else {
+            std::cerr << "Failed to start WebSocket server" << std::endl;
+        }
+    }
+}
+
+bool VerseFinderApp::isPresentationModeActive() const {
+    return presentation_mode_active;
+}
+
+std::string VerseFinderApp::getCurrentDisplayedVerse() const {
+    return current_displayed_verse;
+}
+
+std::string VerseFinderApp::getCurrentDisplayedReference() const {
+    return current_displayed_reference;
+}
+
+bool VerseFinderApp::isPresentationBlank() const {
+    return presentation_blank_screen;
+}
+
+void VerseFinderApp::displayVerseOnPresentation(const std::string& verse_text, const std::string& reference) {
+    current_displayed_verse = verse_text;
+    current_displayed_reference = reference;
+    presentation_blank_screen = false;
+    
+    // Update presentation window if active
+    if (presentation_mode_active && presentation_window_component) {
+        presentation_window_component->displayVerse(verse_text, reference);
+    }
+    
+    // Notify mobile API clients
+    if (mobile_api) {
+        mobile_api->notifyVerseChange(verse_text, reference);
+    }
+}
+
+void VerseFinderApp::setPresentationTheme(const std::string& theme) {
+    // Store theme preference in user settings
+    // This is a placeholder - actual theme setting would require extending PresentationWindow
+    (void)theme; // Suppress unused parameter warning
+    
+    // Notify mobile API clients of state change
+    if (mobile_api) {
+        mobile_api->notifyPresentationStateChange();
+    }
+}
+
+void VerseFinderApp::setPresentationTextSize(float size_multiplier) {
+    // Store text size preference in user settings
+    // This is a placeholder - actual text size setting would require extending PresentationWindow
+    (void)size_multiplier; // Suppress unused parameter warning
+    
+    // Notify mobile API clients of state change
+    if (mobile_api) {
+        mobile_api->notifyPresentationStateChange();
+    }
+}
+
+void VerseFinderApp::setPresentationTextPosition(const std::string& position) {
+    // Store position preference in user settings
+    // This is a placeholder - actual position setting would require extending PresentationWindow
+    (void)position; // Suppress unused parameter warning
+    
+    // Notify mobile API clients of state change
+    if (mobile_api) {
+        mobile_api->notifyPresentationStateChange();
     }
 }

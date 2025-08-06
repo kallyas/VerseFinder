@@ -58,6 +58,9 @@ if(NOT nlohmann_json_FOUND)
     message(STATUS "nlohmann/json downloaded and configured")
 endif()
 
+# OpenSSL for cryptographic functions (WebSocket handshakes)
+find_package(OpenSSL REQUIRED)
+
 # libcurl for HTTP requests
 find_package(CURL QUIET)
 
@@ -274,6 +277,8 @@ target_link_libraries(VerseFinder
     ${OPENGL_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${CURL_LIBRARIES}
+    OpenSSL::SSL
+    OpenSSL::Crypto
 )
 
 # Link OpenGL loader libraries

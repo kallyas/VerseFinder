@@ -1,7 +1,7 @@
 #include <iostream>
-#include "integrations/IntegrationManager.h"
-#include "service/ServicePlan.h"
-#include "api/ApiServer.h"
+#include "../src/integrations/IntegrationManager.h"
+#include "../src/service/ServicePlan.h"
+#include "../src/api/ApiServer.h"
 
 int main() {
     std::cout << "Testing VerseFinder Church Management Integration..." << std::endl;

@@ -1,0 +1,129 @@
+{
+  "presentation_effects": {
+    "presets": {
+      "classic": {
+        "name": "Classic",
+        "description": "Traditional drop shadow for clear readability",
+        "drop_shadow": {
+          "enabled": true,
+          "offset_x": 2.0,
+          "offset_y": 2.0,
+          "blur_radius": 4.0,
+          "color": "#000000",
+          "opacity": 0.8
+        },
+        "outline": {
+          "enabled": false
+        },
+        "glow": {
+          "enabled": false
+        },
+        "gradient": {
+          "enabled": false
+        }
+      },
+      "modern": {
+        "name": "Modern",
+        "description": "Clean outline with subtle glow for contemporary look",
+        "drop_shadow": {
+          "enabled": false
+        },
+        "outline": {
+          "enabled": true,
+          "thickness": 1.0,
+          "color": "#000000",
+          "opacity": 0.9
+        },
+        "glow": {
+          "enabled": true,
+          "radius": 5.0,
+          "strength": 0.3,
+          "color": "#FFFFFF",
+          "opacity": 0.6
+        },
+        "gradient": {
+          "enabled": false
+        }
+      },
+      "bold": {
+        "name": "Bold",
+        "description": "Strong stroke with background for high impact",
+        "drop_shadow": {
+          "enabled": false
+        },
+        "outline": {
+          "enabled": false
+        },
+        "stroke": {
+          "enabled": true,
+          "width": 3.0,
+          "stroke_color": "#000000",
+          "fill_color": "#FFFFFF"
+        },
+        "background": {
+          "enabled": true,
+          "color": "#000000",
+          "opacity": 0.7,
+          "padding_x": 15.0,
+          "padding_y": 10.0,
+          "corner_radius": 8.0
+        }
+      },
+      "elegant": {
+        "name": "Elegant",
+        "description": "Gradient text with soft shadow for sophisticated appearance",
+        "drop_shadow": {
+          "enabled": true,
+          "offset_x": 1.0,
+          "offset_y": 1.0,
+          "blur_radius": 2.0,
+          "color": "#000000",
+          "opacity": 0.5
+        },
+        "gradient": {
+          "enabled": true,
+          "start_color": "#FFFFFF",
+          "end_color": "#E6E6E6",
+          "angle": 90.0
+        }
+      }
+    }
+  },
+  "animation_settings": {
+    "default_transition_duration": 1500,
+    "default_text_animation_duration": 2000,
+    "ken_burns_duration": 10000,
+    "easing_preferences": {
+      "transitions": "ease_in_out",
+      "text_animations": "ease_out",
+      "ken_burns": "linear"
+    }
+  },
+  "background_themes": {
+    "seasonal": {
+      "christmas": {
+        "start_date": "12-01",
+        "end_date": "12-31",
+        "media_directory": "media/seasonal/christmas",
+        "auto_activate": true
+      },
+      "easter": {
+        "start_date": "03-15",
+        "end_date": "04-30",
+        "media_directory": "media/seasonal/easter",
+        "auto_activate": true
+      }
+    },
+    "weather": {
+      "enabled": false,
+      "location": "auto",
+      "update_interval": 30,
+      "conditions": {
+        "sunny": ["media/weather/sunny1.jpg", "media/weather/sunny2.jpg"],
+        "cloudy": ["media/weather/cloudy1.jpg", "media/weather/cloudy2.jpg"],
+        "rainy": ["media/weather/rainy1.jpg", "media/weather/rainy2.jpg"],
+        "snowy": ["media/weather/snowy1.jpg", "media/weather/snowy2.jpg"]
+      }
+    }
+  }
+}

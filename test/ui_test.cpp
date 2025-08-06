@@ -1,5 +1,5 @@
-#include "VerseFinderApp.h"
-#include "MemoryMonitor.h"
+#include "../src/ui/VerseFinderApp.h"
+#include "../src/core/MemoryMonitor.h"
 #include <iostream>
 
 // Simple test to verify the UI components compile and work

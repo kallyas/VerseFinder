@@ -123,37 +123,28 @@ if(APPLE)
     message(STATUS "Using macOS system OpenGL (no external loader needed)")
     
 elseif(WIN32)
-    # Windows - try to find GLEW, download if not found
-    find_package(GLEW QUIET)
+    # Windows - use built-in glad loader for better compatibility
+    message(STATUS "Using built-in OpenGL loader for Windows...")
     
-    if(NOT GLEW_FOUND AND PkgConfig_FOUND)
-        pkg_check_modules(GLEW QUIET glew)
-    endif()
+    set(OPENGL_LOADER_LIBRARIES "")
+    set(OPENGL_LOADER_INCLUDE_DIRS "")
+    set(OPENGL_LOADER_LINK_DIRS "")
+    set(OPENGL_LOADER_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GL3W)
     
-    if(NOT GLEW_FOUND)
-        message(STATUS "GLEW not found, downloading...")
-        FetchContent_Declare(
-            glew
-            GIT_REPOSITORY https://github.com/nigels-com/glew.git
-            GIT_TAG glew-2.2.0
-            SOURCE_SUBDIR build/cmake
-        )
-        
-        set(BUILD_UTILS OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable(glew)
-        
-        set(OPENGL_LOADER_LIBRARIES GLEW::GLEW)
-        set(OPENGL_LOADER_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GLEW)
-        message(STATUS "GLEW downloaded and configured")
-    else()
-        set(OPENGL_LOADER_LIBRARIES ${GLEW_LIBRARIES})
-        set(OPENGL_LOADER_INCLUDE_DIRS ${GLEW_INCLUDE_DIRS})
-        set(OPENGL_LOADER_LINK_DIRS ${GLEW_LIBRARY_DIRS})
-        set(OPENGL_LOADER_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GLEW)
-        message(STATUS "Found system GLEW")
-    endif()
+    # Download gl3w which is more reliable than GLEW on Windows
+    FetchContent_Declare(
+        gl3w
+        URL https://github.com/skaslev/gl3w/archive/refs/heads/master.zip
+    )
+    
+    FetchContent_MakeAvailable(gl3w)
+    
+    # Add gl3w to sources
+    list(APPEND IMGUI_SOURCES ${gl3w_SOURCE_DIR}/src/gl3w.c)
+    set(OPENGL_LOADER_INCLUDE_DIRS ${gl3w_SOURCE_DIR}/include)
     
     set(OPENGL_LOADER_FOUND TRUE)
+    message(STATUS "gl3w configured for Windows")
     
 else()
     # Linux and other Unix-like systems
@@ -195,6 +186,7 @@ endif()
 include_directories(
     src/core
     src/ui
+    src/ui/effects
     src/integrations
     src/service
     src/api
@@ -232,6 +224,9 @@ add_executable(VerseFinder
     src/ui/components/TranslationSelector.cpp
     src/ui/components/TranslationComparison.cpp
     src/ui/components/PresentationWindow.cpp
+    src/ui/effects/AnimationSystem.cpp
+    src/ui/effects/PresentationEffects.cpp
+    src/ui/effects/MediaManager.cpp
     src/ui/settings/ThemeManager.cpp
     src/ui/system/FontManager.cpp
     src/ui/system/WindowManager.cpp
@@ -340,9 +335,12 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/bible.json)
     file(COPY bible.json DESTINATION ${CMAKE_BINARY_DIR})
 endif()
 
+# Test executables
+enable_testing()
+
 # Add performance test executable
 add_executable(performance_test
-    performance_test.cpp
+    test/performance_test.cpp
     src/core/VerseFinder.cpp
     src/core/SearchCache.cpp
     src/core/SearchOptimizer.cpp
@@ -358,41 +356,194 @@ add_executable(performance_test
     src/core/TopicManager.cpp
 )
 
-# Link libraries for performance test
-target_link_libraries(performance_test
-    ${CMAKE_DL_LIBS}
+# Add validation test executable
+add_executable(validation_test
+    test/validation_test.cpp
+    src/ui/effects/AnimationSystem.cpp
+    src/ui/effects/PresentationEffects.cpp
+    src/ui/effects/MediaManager.cpp
+    ${IMGUI_SOURCES}
 )
 
-if(TARGET nlohmann_json::nlohmann_json)
-    target_link_libraries(performance_test nlohmann_json::nlohmann_json)
-elseif(TARGET nlohmann_json)
-    target_link_libraries(performance_test nlohmann_json)
-endif()
+# Add advanced features test executable
+add_executable(test_advanced_features
+    test/test_advanced_features.cpp
+    src/core/VerseFinder.cpp
+    src/core/SearchCache.cpp
+    src/core/SearchOptimizer.cpp
+    src/core/PerformanceBenchmark.cpp
+    src/core/FuzzySearch.cpp
+    src/core/UserSettings.cpp
+    src/core/AutoComplete.cpp
+    src/core/MemoryMonitor.cpp
+    src/core/IncrementalSearch.cpp
+    src/core/SemanticSearch.cpp
+    src/core/CrossReferenceSystem.cpp
+    src/core/SearchAnalytics.cpp
+    src/core/TopicManager.cpp
+)
 
-# Platform-specific linking for performance test
-if(APPLE)
-    target_link_libraries(performance_test
-        "-framework OpenGL"
-        "-framework Cocoa"
-        "-framework IOKit"
-        "-framework CoreVideo"
-    )
-elseif(WIN32)
-    target_link_libraries(performance_test
-        opengl32
-        gdi32
-        shell32
-        user32
-        kernel32
-    )
-elseif(UNIX AND NOT APPLE)
-    find_package(Threads REQUIRED)
-    target_link_libraries(performance_test
-        Threads::Threads
+# Add integration test executable
+add_executable(integration_test
+    test/integration_test.cpp
+    src/core/VerseFinder.cpp
+    src/core/SearchCache.cpp
+    src/core/SearchOptimizer.cpp
+    src/core/PerformanceBenchmark.cpp
+    src/core/FuzzySearch.cpp
+    src/core/UserSettings.cpp
+    src/core/AutoComplete.cpp
+    src/core/MemoryMonitor.cpp
+    src/core/IncrementalSearch.cpp
+    src/core/SemanticSearch.cpp
+    src/core/CrossReferenceSystem.cpp
+    src/core/SearchAnalytics.cpp
+    src/core/TopicManager.cpp
+)
+
+# Add quick test executable
+add_executable(quick_test
+    test/quick_test.cpp
+    src/core/VerseFinder.cpp
+    src/core/SearchCache.cpp
+    src/core/SearchOptimizer.cpp
+    src/core/PerformanceBenchmark.cpp
+    src/core/FuzzySearch.cpp
+    src/core/UserSettings.cpp
+    src/core/AutoComplete.cpp
+    src/core/MemoryMonitor.cpp
+    src/core/IncrementalSearch.cpp
+    src/core/SemanticSearch.cpp
+    src/core/CrossReferenceSystem.cpp
+    src/core/SearchAnalytics.cpp
+    src/core/TopicManager.cpp
+)
+
+# Link libraries for all test executables
+set(TEST_EXECUTABLES 
+    performance_test 
+    test_advanced_features 
+    integration_test 
+    quick_test
+)
+
+set(UI_TEST_EXECUTABLES
+    validation_test
+)
+
+foreach(TEST_TARGET ${TEST_EXECUTABLES})
+    # Link standard libraries
+    target_link_libraries(${TEST_TARGET}
         ${CMAKE_DL_LIBS}
     )
     
-    if(X11_FOUND)
-        target_link_libraries(performance_test ${X11_LIBRARIES})
+    # Link JSON library
+    if(TARGET nlohmann_json::nlohmann_json)
+        target_link_libraries(${TEST_TARGET} nlohmann_json::nlohmann_json)
+    elseif(TARGET nlohmann_json)
+        target_link_libraries(${TEST_TARGET} nlohmann_json)
     endif()
-endif()
+    
+    # Platform-specific linking
+    if(APPLE)
+        target_link_libraries(${TEST_TARGET}
+            "-framework OpenGL"
+            "-framework Cocoa"
+            "-framework IOKit"
+            "-framework CoreVideo"
+        )
+    elseif(WIN32)
+        target_link_libraries(${TEST_TARGET}
+            opengl32
+            gdi32
+            shell32
+            user32
+            kernel32
+        )
+    elseif(UNIX AND NOT APPLE)
+        find_package(Threads REQUIRED)
+        target_link_libraries(${TEST_TARGET}
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+        )
+        
+        if(X11_FOUND)
+            target_link_libraries(${TEST_TARGET} ${X11_LIBRARIES})
+        endif()
+    endif()
+endforeach()
+
+# Special handling for UI tests that need ImGui and OpenGL
+foreach(UI_TEST_TARGET ${UI_TEST_EXECUTABLES})
+    # Link standard libraries
+    target_link_libraries(${UI_TEST_TARGET}
+        ${GLFW3_LIBRARIES}
+        ${OPENGL_LIBRARIES}
+        ${CMAKE_DL_LIBS}
+    )
+    
+    # Link OpenGL loader libraries
+    if(OPENGL_LOADER_LIBRARIES)
+        target_link_libraries(${UI_TEST_TARGET} ${OPENGL_LOADER_LIBRARIES})
+    endif()
+    
+    # Link JSON library
+    if(TARGET nlohmann_json::nlohmann_json)
+        target_link_libraries(${UI_TEST_TARGET} nlohmann_json::nlohmann_json)
+    elseif(TARGET nlohmann_json)
+        target_link_libraries(${UI_TEST_TARGET} nlohmann_json)
+    endif()
+    
+    # Compiler definitions for OpenGL loader
+    target_compile_definitions(${UI_TEST_TARGET} PRIVATE 
+        ${OPENGL_LOADER_DEFINITIONS}
+    )
+    
+    # Platform-specific linking
+    if(APPLE)
+        target_link_libraries(${UI_TEST_TARGET}
+            "-framework OpenGL"
+            "-framework Cocoa"
+            "-framework IOKit"
+            "-framework CoreVideo"
+        )
+    elseif(WIN32)
+        target_link_libraries(${UI_TEST_TARGET}
+            opengl32
+            gdi32
+            shell32
+            user32
+            kernel32
+        )
+    elseif(UNIX AND NOT APPLE)
+        find_package(Threads REQUIRED)
+        target_link_libraries(${UI_TEST_TARGET}
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+        )
+        
+        if(X11_FOUND)
+            target_link_libraries(${UI_TEST_TARGET} ${X11_LIBRARIES})
+        endif()
+    endif()
+    
+    # Add link directories for pkg-config libraries
+    if(GLFW3_LIBRARY_DIRS)
+        target_link_directories(${UI_TEST_TARGET} PRIVATE ${GLFW3_LIBRARY_DIRS})
+    endif()
+    if(OPENGL_LOADER_LINK_DIRS)
+        target_link_directories(${UI_TEST_TARGET} PRIVATE ${OPENGL_LOADER_LINK_DIRS})
+    endif()
+    
+    # On macOS with custom loader, force include our OpenGL header for UI tests
+    if(APPLE AND OPENGL_LOADER_DEFINITIONS MATCHES "IMGUI_IMPL_OPENGL_LOADER_CUSTOM")
+        target_compile_options(${UI_TEST_TARGET} PRIVATE "-include${CMAKE_CURRENT_SOURCE_DIR}/src/opengl_loader.h")
+    endif()
+endforeach()
+
+# Add tests to CTest
+add_test(NAME PerformanceTest COMMAND performance_test)
+add_test(NAME ValidationTest COMMAND validation_test)
+add_test(NAME AdvancedFeaturesTest COMMAND test_advanced_features)
+add_test(NAME IntegrationTest COMMAND integration_test)
+add_test(NAME QuickTest COMMAND quick_test)

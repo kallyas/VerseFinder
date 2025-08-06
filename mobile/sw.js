@@ -1,13 +1,11 @@
 // Service Worker for VerseFinder Mobile Companion
 const CACHE_NAME = 'versefinder-mobile-v1.0.0';
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/style.css',
-    '/app.js',
-    '/manifest.json',
-    '/icon-192.png',
-    '/icon-512.png'
+    '/mobile/',
+    '/mobile/index.html',
+    '/mobile/style.css',
+    '/mobile/app.js',
+    '/mobile/manifest.json'
 ];
 
 // Install event - cache resources

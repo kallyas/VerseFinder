@@ -1,5 +1,5 @@
-#include "../../interfaces/PluginInterfaces.h"
-#include "../../api/PluginAPI.h"
+#include "interfaces/PluginInterfaces.h"
+#include "api/PluginAPI.h"
 #include <algorithm>
 #include <regex>
 
@@ -193,8 +193,16 @@ private:
         }
         
         // Convert wildcards to regex
-        std::replace(regexPattern.begin(), regexPattern.end(), '*', '.*');
-        std::replace(regexPattern.begin(), regexPattern.end(), '?', '.');
+        size_t pos = 0;
+        while ((pos = regexPattern.find('*', pos)) != std::string::npos) {
+            regexPattern.replace(pos, 1, ".*");
+            pos += 2;
+        }
+        pos = 0;
+        while ((pos = regexPattern.find('?', pos)) != std::string::npos) {
+            regexPattern.replace(pos, 1, ".");
+            pos += 1;
+        }
         
         return regexSearch(regexPattern, translation, caseSensitive);
     }

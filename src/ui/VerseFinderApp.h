@@ -87,7 +87,12 @@ private:
     int selected_result_index = -1;
     std::string selected_verse_text;
     std::string last_search_query;
+    std::string last_rendered_search_input;
     bool auto_search = true;
+    bool pending_auto_search = false;
+    std::chrono::steady_clock::time_point last_input_edit_time = std::chrono::steady_clock::now();
+    std::string last_suggestion_query;
+    static constexpr int AUTO_SEARCH_DEBOUNCE_MS = 180;
     
     // Fuzzy search state
     bool fuzzy_search_enabled = false;

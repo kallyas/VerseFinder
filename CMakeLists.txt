@@ -338,6 +338,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(VerseFinder PRIVATE -Wall -Wextra)
 endif()
 
+# Convenience target: make run
+add_custom_target(run
+    COMMAND $<TARGET_FILE:VerseFinder>
+    DEPENDS VerseFinder
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    USES_TERMINAL
+)
+
 # Copy assets and data to the build directory
 file(COPY data/ DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY assets/ DESTINATION ${CMAKE_BINARY_DIR})

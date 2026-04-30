@@ -707,54 +707,86 @@ void VerseFinderApp::run() {
 }
 
 void VerseFinderApp::renderMainWindow() {
-    ImGui::Columns(2, "main_columns", true);
-    static bool first_time = true;
-    if (first_time) {
-        ImGui::SetColumnWidth(0, 400.0f);
-        first_time = false;
+    ImGuiTableFlags layout_flags = ImGuiTableFlags_Resizable |
+                                  ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("main_layout_table", 2, layout_flags)) {
+        ImGui::TableSetupColumn("SearchColumn", ImGuiTableColumnFlags_WidthStretch, 0.66f);
+        ImGui::TableSetupColumn("InfoColumn", ImGuiTableColumnFlags_WidthStretch, 0.34f);
+
+        ImGui::TableNextRow();
+
+        // Left panel: search workflow
+        ImGui::TableSetColumnIndex(0);
+        ImGui::BeginChild("SearchPanel", ImVec2(0, 0), false);
+        ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "Search Workspace");
+        ImGui::Separator();
+        renderSearchArea();
+        ImGui::Spacing();
+        renderSearchResults();
+        ImGui::EndChild();
+
+        // Right panel: controls and runtime status
+        ImGui::TableSetColumnIndex(1);
+        ImGui::BeginChild("InfoPanel", ImVec2(0, 0), false);
+
+        if (ImGui::CollapsingHeader("Translation", ImGuiTreeNodeFlags_DefaultOpen)) {
+            renderTranslationSelector();
+        }
+        if (ImGui::CollapsingHeader("Presentation", ImGuiTreeNodeFlags_DefaultOpen)) {
+            renderPresentationPreview();
+        }
+        if (ImGui::CollapsingHeader("Session Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+            renderStatusBar();
+        }
+
+        ImGui::EndChild();
+        ImGui::EndTable();
     }
-    
-    // Left panel - Search and results
-    ImGui::BeginChild("SearchPanel", ImVec2(0, 0), true);
-    
-    renderSearchArea();
-    ImGui::Separator();
-    renderSearchResults();
-    
-    ImGui::EndChild();
-    
-    ImGui::NextColumn();
-    
-    // Right panel - Translation info and status
-    ImGui::BeginChild("InfoPanel", ImVec2(0, 0), true);
-    
-    renderTranslationSelector();
-    ImGui::Separator();
-    renderPresentationPreview();
-    ImGui::Separator();
-    renderStatusBar();
-    
-    ImGui::EndChild();
 }
 
 void VerseFinderApp::renderSearchArea() {
     ImGui::Text("Bible Search");
+    ImGui::TextColored(
+        ImVec4(0.72f, 0.72f, 0.78f, 1.0f),
+        "Search by reference (John 3:16), chapter (Psalm 23), or keywords."
+    );
     ImGui::Spacing();
+
+    const int result_count = static_cast<int>(search_results.size());
+    if (!current_translation.abbreviation.empty()) {
+        ImGui::Text("Translation: %s", current_translation.abbreviation.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+    }
+    ImGui::Text("Results: %d", result_count);
+    ImGui::Separator();
     
     // Search input
-    ImGui::PushItemWidth(-1);
+    ImGui::SetNextItemWidth(-1);
     bool search_changed = ImGui::InputTextWithHint("##search", "Enter verse reference (e.g., 'John 3:16') or keywords...", 
                                                   search_input, sizeof(search_input), ImGuiInputTextFlags_EnterReturnsTrue);
-    ImGui::PopItemWidth();
+    
+    const std::string current_input = search_input;
+    const bool input_modified = (current_input != last_rendered_search_input);
+    if (input_modified) {
+        last_rendered_search_input = current_input;
+        last_input_edit_time = std::chrono::steady_clock::now();
+        pending_auto_search = true;
+        performIncrementalSearch();
+    }
     
     // Search history dropdown (if history exists)
     if (!userSettings.content.searchHistory.empty()) {
         ImGui::Spacing();
-        if (ImGui::BeginCombo("Recent Searches", nullptr)) {
+        const std::string history_preview = userSettings.content.searchHistory.front();
+        if (ImGui::BeginCombo("Recent Searches", history_preview.c_str())) {
             for (const auto& historical_search : userSettings.content.searchHistory) {
                 if (ImGui::Selectable(historical_search.c_str())) {
                     strncpy(search_input, historical_search.c_str(), sizeof(search_input) - 1);
                     search_input[sizeof(search_input) - 1] = '\0';
+                    last_rendered_search_input = search_input;
                     performSearch();
                 }
             }
@@ -762,29 +794,46 @@ void VerseFinderApp::renderSearchArea() {
         }
     }
     
-    // Auto-search or manual search
-    if (search_changed || (auto_search && strcmp(search_input, last_search_query.c_str()) != 0)) {
-        last_search_query = search_input;
+    // Explicit Enter search always wins
+    if (search_changed) {
         performSearch();
+        pending_auto_search = false;
+    } else if (auto_search && pending_auto_search) {
+        if (current_input.empty()) {
+            clearSearch();
+            pending_auto_search = false;
+        } else {
+            const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - last_input_edit_time
+            ).count();
+            if (elapsed_ms >= AUTO_SEARCH_DEBOUNCE_MS) {
+                performSearch();
+                pending_auto_search = false;
+            }
+        }
+    }
+    
+    if (!auto_search) {
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.75f, 1.0f), "Press Enter or click Search to run query");
     }
     
     // Search buttons and controls
     ImGui::Spacing();
-    if (ImGui::Button("Search", ImVec2(100, 0))) {
+    const bool has_input = !current_input.empty();
+    ImGui::BeginDisabled(!has_input);
+    if (ImGui::Button("Search", ImVec2(120, 0))) {
         performSearch();
     }
+    ImGui::EndDisabled();
     ImGui::SameLine();
-    if (ImGui::Button("Clear", ImVec2(80, 0))) {
+    ImGui::BeginDisabled(!has_input && search_results.empty());
+    if (ImGui::Button("Clear", ImVec2(100, 0))) {
         clearSearch();
     }
-    ImGui::SameLine();
-    ImGui::Text("Auto: ");
-    ImGui::SameLine();
-    ImGui::Checkbox("##auto_search", &auto_search);
-    
-    // Fuzzy search controls
-    ImGui::SameLine();
-    ImGui::Text("Fuzzy: ");
+    ImGui::EndDisabled();
+
+    ImGui::Spacing();
+    ImGui::Checkbox("Auto search", &auto_search);
     ImGui::SameLine();
     if (ImGui::Checkbox("##fuzzy_search", &fuzzy_search_enabled)) {
         bible.enableFuzzySearch(fuzzy_search_enabled);
@@ -794,16 +843,18 @@ void VerseFinderApp::renderSearchArea() {
             book_suggestions = bible.findBookNameSuggestions(search_input);
         }
     }
+    ImGui::SameLine();
+    ImGui::TextUnformatted("Fuzzy search");
     
     // Show fuzzy search suggestions
     if (fuzzy_search_enabled && strlen(search_input) > 0) {
-        // Book name suggestions
-        if (!book_suggestions.empty()) {
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Did you mean:");
+        auto render_suggestion_row = [&](const std::string& prefix, const std::string& label) {
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "%s", label.c_str());
+            const float right_edge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+            bool first_item = true;
             for (size_t i = 0; i < std::min(book_suggestions.size(), size_t(3)); ++i) {
                 const auto& suggestion = book_suggestions[i];
-                std::string confidence_text = "";
+                std::string confidence_text;
                 if (suggestion.matchType == "fuzzy") {
                     confidence_text = " (~" + std::to_string(static_cast<int>(suggestion.confidence * 100)) + "%)";
                 } else if (suggestion.matchType == "phonetic") {
@@ -811,30 +862,50 @@ void VerseFinderApp::renderSearchArea() {
                 } else if (suggestion.matchType == "partial") {
                     confidence_text = " (...)";
                 }
-                
-                if (ImGui::SmallButton((suggestion.text + confidence_text).c_str())) {
+
+                const std::string button_text = prefix + suggestion.text + confidence_text;
+                if (!first_item) {
+                    ImGui::SameLine();
+                }
+                first_item = false;
+                if (ImGui::SmallButton(button_text.c_str())) {
                     strncpy(search_input, suggestion.text.c_str(), sizeof(search_input) - 1);
                     search_input[sizeof(search_input) - 1] = '\0';
                     performSearch();
                 }
-                if (i < std::min(book_suggestions.size(), size_t(3)) - 1) {
-                    ImGui::SameLine();
+                const float next_x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+                if (next_x > right_edge) {
+                    first_item = true;
                 }
             }
+        };
+
+        // Book name suggestions
+        if (!book_suggestions.empty()) {
+            ImGui::Spacing();
+            render_suggestion_row("book:", "Did you mean:");
         }
         
         // Query keyword suggestions
         if (!query_suggestions.empty()) {
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Suggestions:");
+            const float right_edge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+            bool first_item = true;
             for (size_t i = 0; i < std::min(query_suggestions.size(), size_t(3)); ++i) {
-                if (ImGui::SmallButton(query_suggestions[i].c_str())) {
+                const std::string button_text = "query:" + query_suggestions[i];
+                if (!first_item) {
+                    ImGui::SameLine();
+                }
+                first_item = false;
+                if (ImGui::SmallButton(button_text.c_str())) {
                     strncpy(search_input, query_suggestions[i].c_str(), sizeof(search_input) - 1);
                     search_input[sizeof(search_input) - 1] = '\0';
                     performSearch();
                 }
-                if (i < std::min(query_suggestions.size(), size_t(3)) - 1) {
-                    ImGui::SameLine();
+                const float next_x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+                if (next_x > right_edge) {
+                    first_item = true;
                 }
             }
         }
@@ -843,19 +914,20 @@ void VerseFinderApp::renderSearchArea() {
     // Search hints
     if (strlen(search_input) == 0) {
         ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Examples:");
-        ImGui::BulletText("John 3:16 - Find specific verse");
-        ImGui::BulletText("love - Find verses with keyword");
-        ImGui::BulletText("faith hope love - Find multiple keywords");
-        ImGui::BulletText("Psalm 23 - Find chapter references");
-        
-        if (fuzzy_search_enabled) {
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Fuzzy Search Examples:");
-            ImGui::BulletText("Jhn 3:16 - Corrects typos in book names");
-            ImGui::BulletText("luv - Finds 'love' with phonetic matching");
-            ImGui::BulletText("Gen - Suggests 'Genesis' from partial match");
-            ImGui::BulletText("fait - Suggests 'faith' from similar spelling");
+        if (ImGui::CollapsingHeader("Search Examples", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::BulletText("John 3:16 - Find specific verse");
+            ImGui::BulletText("love - Find verses with keyword");
+            ImGui::BulletText("faith hope love - Find multiple keywords");
+            ImGui::BulletText("Psalm 23 - Find chapter references");
+            
+            if (fuzzy_search_enabled) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Fuzzy Examples:");
+                ImGui::BulletText("Jhn 3:16 - Corrects typo in book name");
+                ImGui::BulletText("luv - Finds 'love' with phonetic matching");
+                ImGui::BulletText("Gen - Suggests 'Genesis' from partial match");
+                ImGui::BulletText("fait - Suggests 'faith' from similar spelling");
+            }
         }
     }
 }
@@ -888,133 +960,148 @@ void VerseFinderApp::renderSearchResults() {
     
     // Results list with scrolling
     ImGui::BeginChild("ResultsList", ImVec2(0, 0), false);
+    const std::string lower_search = [&]() {
+        if (strlen(search_input) == 0) {
+            return std::string{};
+        }
+        std::string lower = search_input;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                      [](unsigned char c){ return std::tolower(c); });
+        return lower;
+    }();
     
-    for (size_t i = 0; i < search_results.size(); ++i) {
-        const std::string& result = search_results[i];
+    const float child_height = is_viewing_chapter ? 60.0f : 80.0f;
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(search_results.size()), child_height + ImGui::GetStyle().ItemSpacing.y);
+    while (clipper.Step()) {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+            const std::string& result = search_results[static_cast<size_t>(i)];
+            ImGui::PushID(i);
         
-        // Parse reference and text
-        size_t colon_pos = result.find(": ");
-        if (colon_pos == std::string::npos) continue;
-        
-        std::string reference = result.substr(0, colon_pos);
-        std::string verse_text = result.substr(colon_pos + 2);
-        
-        // Highlight current selection
-        bool is_selected = (static_cast<int>(i) == selected_result_index);
-        if (is_selected) {
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.3f, 0.5f, 0.8f, 0.3f));
-        }
-        
-        // Different layout for chapter viewing vs search results
-        float child_height = is_viewing_chapter ? 60.0f : 80.0f;
-        ImGui::BeginChild(("result_" + std::to_string(i)).c_str(), ImVec2(0, child_height), true);
-        
-        if (is_viewing_chapter) {
-            // Extract verse number for chapter viewing
-            size_t last_colon = reference.find_last_of(':');
-            std::string verse_num = (last_colon != std::string::npos) ? 
-                                   reference.substr(last_colon + 1) : std::to_string(i + 1);
-            
-            // Show verse number prominently and make it clickable
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.3f, 0.7f, 1.0f));
-            
-            if (ImGui::Button(("v" + verse_num).c_str(), ImVec2(40, 0))) {
-                // Jump to this specific verse
-                std::string book;
-                int chapter, verse;
-                if (bible.parseReference(reference, book, chapter, verse)) {
-                    jumpToVerse(book, chapter, verse);
-                }
+            // Parse reference and text
+            size_t colon_pos = result.find(": ");
+            if (colon_pos == std::string::npos) {
+                ImGui::PopID();
+                continue;
             }
-            ImGui::PopStyleColor(3);
+        
+            std::string reference = result.substr(0, colon_pos);
+            std::string verse_text = result.substr(colon_pos + 2);
+        
+            // Highlight current selection
+            bool is_selected = (i == selected_result_index);
+            if (is_selected) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.3f, 0.5f, 0.8f, 0.3f));
+            }
+        
+            // Different layout for chapter viewing vs search results
+            ImGui::BeginChild("result", ImVec2(0, child_height), true);
+        
+            if (is_viewing_chapter) {
+                // Extract verse number for chapter viewing
+                size_t last_colon = reference.find_last_of(':');
+                std::string verse_num = (last_colon != std::string::npos) ? 
+                                       reference.substr(last_colon + 1) : std::to_string(i + 1);
             
-            ImGui::SameLine();
-            ImGui::Text("%s", verse_text.c_str());
-        } else {
-            // Regular search result display
-            // Show favorite star if this verse is favorited
-            bool isFavorite = userSettings.isFavoriteVerse(result);
-            if (isFavorite) {
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "*");
+                // Show verse number prominently and make it clickable
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.3f, 0.7f, 1.0f));
+            
+                if (ImGui::Button(("v" + verse_num).c_str(), ImVec2(40, 0))) {
+                    // Jump to this specific verse
+                    std::string book;
+                    int chapter, verse;
+                    if (bible.parseReference(reference, book, chapter, verse)) {
+                        jumpToVerse(book, chapter, verse);
+                    }
+                }
+                ImGui::PopStyleColor(3);
+            
                 ImGui::SameLine();
-            }
-            ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
-            
-            // Verse text with word wrapping
-            ImGui::PushTextWrapPos(0.0f);
-            
-            // Highlight search terms in verse text
-            std::string display_text = verse_text;
-            if (display_text.length() > 150) {
-                display_text = display_text.substr(0, 147) + "...";
-            }
-            
-            // Simple highlighting with case-insensitive search
-            bool should_highlight = false;
-            if (strlen(search_input) > 0) {
-                std::string lower_search = search_input;
-                std::string lower_display = display_text;
-                std::transform(lower_search.begin(), lower_search.end(), lower_search.begin(),
-                              [](unsigned char c){ return std::tolower(c); });
-                std::transform(lower_display.begin(), lower_display.end(), lower_display.begin(),
-                              [](unsigned char c){ return std::tolower(c); });
-                should_highlight = lower_display.find(lower_search) != std::string::npos;
-            }
-            
-            if (should_highlight) {
-                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%s", display_text.c_str());
+                ImGui::Text("%s", verse_text.c_str());
             } else {
-                ImGui::Text("%s", display_text.c_str());
-            }
+                // Regular search result display
+                // Show favorite star if this verse is favorited
+                bool isFavorite = userSettings.isFavoriteVerse(result);
+                if (isFavorite) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "*");
+                    ImGui::SameLine();
+                }
+                ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", reference.c_str());
             
-            ImGui::PopTextWrapPos();
-        }
-        
-        // Click to select/view
-        if (ImGui::IsItemClicked()) {
-            selectResult(static_cast<int>(i));
-        }
-        
-        // Double-click to open modal
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-            selectResult(static_cast<int>(i));
-            show_verse_modal = true;
-        }
-        
-        // Right-click context menu
-        if (ImGui::BeginPopupContextItem(("context_" + std::to_string(i)).c_str())) {
-            bool isFavorite = userSettings.isFavoriteVerse(result);
-            if (isFavorite) {
-                if (ImGui::MenuItem("Remove from Favorites")) {
-                    userSettings.removeFavoriteVerse(result);
+                // Verse text with word wrapping
+                ImGui::PushTextWrapPos(0.0f);
+            
+                // Highlight search terms in verse text
+                std::string display_text = verse_text;
+                if (display_text.length() > 150) {
+                    display_text = display_text.substr(0, 147) + "...";
                 }
-            } else {
-                if (ImGui::MenuItem("Add to Favorites")) {
-                    userSettings.addFavoriteVerse(result);
+            
+                // Simple highlighting with case-insensitive search
+                bool should_highlight = false;
+                if (!lower_search.empty()) {
+                    std::string lower_display = display_text;
+                    std::transform(lower_display.begin(), lower_display.end(), lower_display.begin(),
+                                  [](unsigned char c){ return std::tolower(c); });
+                    should_highlight = lower_display.find(lower_search) != std::string::npos;
                 }
+            
+                if (should_highlight) {
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.6f, 1.0f), "%s", display_text.c_str());
+                } else {
+                    ImGui::Text("%s", display_text.c_str());
+                }
+            
+                ImGui::PopTextWrapPos();
             }
-            if (ImGui::MenuItem("Copy to Clipboard")) {
-                copyToClipboard(result);
+        
+            // Click to select/view
+            if (ImGui::IsItemClicked()) {
+                selectResult(i);
             }
-            if (ImGui::MenuItem("View Full Verse")) {
-                selectResult(static_cast<int>(i));
+        
+            // Double-click to open modal
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                selectResult(i);
                 show_verse_modal = true;
             }
-            if (userSettings.presentation.enabled && ImGui::MenuItem("Display on Presentation")) {
-                selectResult(static_cast<int>(i));
-                std::string verse_text = formatVerseText(selected_verse_text);
-                std::string reference = formatVerseReference(selected_verse_text);
-                displayVerseOnPresentation(verse_text, reference);
+        
+            // Right-click context menu
+            if (ImGui::BeginPopupContextItem("context")) {
+                bool isFavorite = userSettings.isFavoriteVerse(result);
+                if (isFavorite) {
+                    if (ImGui::MenuItem("Remove from Favorites")) {
+                        userSettings.removeFavoriteVerse(result);
+                    }
+                } else {
+                    if (ImGui::MenuItem("Add to Favorites")) {
+                        userSettings.addFavoriteVerse(result);
+                    }
+                }
+                if (ImGui::MenuItem("Copy to Clipboard")) {
+                    copyToClipboard(result);
+                }
+                if (ImGui::MenuItem("View Full Verse")) {
+                    selectResult(i);
+                    show_verse_modal = true;
+                }
+                if (userSettings.presentation.enabled && ImGui::MenuItem("Display on Presentation")) {
+                    selectResult(i);
+                    std::string verse_text = formatVerseText(selected_verse_text);
+                    std::string reference = formatVerseReference(selected_verse_text);
+                    displayVerseOnPresentation(verse_text, reference);
+                }
+                ImGui::EndPopup();
             }
-            ImGui::EndPopup();
-        }
         
-        ImGui::EndChild();
+            ImGui::EndChild();
         
-        if (is_selected) {
-            ImGui::PopStyleColor();
+            if (is_selected) {
+                ImGui::PopStyleColor();
+            }
+            ImGui::PopID();
         }
     }
     
@@ -2118,6 +2205,7 @@ void VerseFinderApp::performSearch() {
     }
     
     std::string query = search_input;
+    last_search_query = query;
     
     // Benchmark the search operation
     auto start_time = std::chrono::steady_clock::now();
@@ -2244,6 +2332,41 @@ void VerseFinderApp::performSearch() {
         selected_verse_text = search_results[selected_result_index];
     } else {
         selected_verse_text.clear();
+    }
+}
+
+void VerseFinderApp::performIncrementalSearch() {
+    if (strlen(search_input) < 2 || !fuzzy_search_enabled) {
+        query_suggestions.clear();
+        book_suggestions.clear();
+        last_suggestion_query.clear();
+        return;
+    }
+    updateAutoComplete();
+}
+
+void VerseFinderApp::updateAutoComplete() {
+    if (!bible.isReady() || !fuzzy_search_enabled) {
+        query_suggestions.clear();
+        book_suggestions.clear();
+        last_suggestion_query.clear();
+        return;
+    }
+    
+    std::string query = search_input;
+    if (query == last_suggestion_query) {
+        return;
+    }
+    last_suggestion_query = query;
+    
+    query_suggestions = bible.generateQuerySuggestions(query, current_translation.name);
+    if (query_suggestions.size() > 3) {
+        query_suggestions.resize(3);
+    }
+    
+    book_suggestions = bible.findBookNameSuggestions(query);
+    if (book_suggestions.size() > 3) {
+        book_suggestions.resize(3);
     }
 }
 

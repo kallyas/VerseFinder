@@ -158,10 +158,12 @@ std::string VerseFinder::makeKey(const std::string& book, int chapter, int verse
 
 std::vector<std::string> VerseFinder::tokenize(const std::string& text) {
     std::vector<std::string> tokens;
+    tokens.reserve(text.size() / 4);
     std::string token;
-    for (char c : text) {
+    token.reserve(24);
+    for (unsigned char c : text) {
         if (std::isalnum(c)) {
-            token += std::tolower(c);
+            token += static_cast<char>(std::tolower(c));
         } else if (!token.empty()) {
             tokens.push_back(token);
             token.clear();
@@ -264,14 +266,18 @@ std::vector<std::string> VerseFinder::searchByFullText(const std::string& query,
     std::string lower_query = query;
     std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
                    [](unsigned char c){ return std::tolower(c); });
+    const auto query_words = tokenize(lower_query);
     
     auto trans_it = verses.find(translation);
     if (trans_it == verses.end()) {
         return {"Translation not found."};
     }
     
-    std::vector<std::string> results;
     const auto& translation_verses = trans_it->second;
+    std::vector<std::string> exact_matches;
+    std::vector<std::string> word_matches;
+    exact_matches.reserve(64);
+    word_matches.reserve(128);
     
     // Search through all verses in the translation
     for (const auto& verse_pair : translation_verses) {
@@ -285,11 +291,10 @@ std::vector<std::string> VerseFinder::searchByFullText(const std::string& query,
         
         // Check if the query appears as a substring in the verse
         if (lower_verse_text.find(lower_query) != std::string::npos) {
-            results.push_back(verse_key + ": " + verse.text);
+            exact_matches.push_back(verse_key + ": " + verse.text);
         }
         // If not exact substring match, check if all query words appear in the verse
-        else {
-            auto query_words = tokenize(lower_query);
+        else if (!query_words.empty()) {
             bool all_words_found = true;
             
             for (const auto& word : query_words) {
@@ -299,30 +304,16 @@ std::vector<std::string> VerseFinder::searchByFullText(const std::string& query,
                 }
             }
             
-            if (all_words_found && !query_words.empty()) {
-                results.push_back(verse_key + ": " + verse.text);
+            if (all_words_found) {
+                word_matches.push_back(verse_key + ": " + verse.text);
             }
         }
     }
     
-    // Sort results by relevance (exact phrase matches first, then word matches)
-    std::sort(results.begin(), results.end(), [&](const std::string& a, const std::string& b) {
-        std::string text_a = a.substr(a.find(": ") + 2);
-        std::string text_b = b.substr(b.find(": ") + 2);
-        
-        std::transform(text_a.begin(), text_a.end(), text_a.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
-        std::transform(text_b.begin(), text_b.end(), text_b.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
-        
-        bool a_exact = text_a.find(lower_query) != std::string::npos;
-        bool b_exact = text_b.find(lower_query) != std::string::npos;
-        
-        if (a_exact && !b_exact) return true;
-        if (!a_exact && b_exact) return false;
-        
-        return false; // Keep original order for same relevance
-    });
+    std::vector<std::string> results;
+    results.reserve(exact_matches.size() + word_matches.size());
+    results.insert(results.end(), exact_matches.begin(), exact_matches.end());
+    results.insert(results.end(), word_matches.begin(), word_matches.end());
     
     return results.empty() ? std::vector<std::string>{"No matching verses found."} : results;
 }

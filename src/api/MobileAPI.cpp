@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <chrono>
+#include <iostream>
 
 MobileAPI::MobileAPI(VerseFinder* bible, VerseFinderApp* app) 
     : bible_(bible), app_(app), ws_server_(nullptr) {
@@ -441,6 +442,7 @@ void MobileAPI::removeQuickAccessVerse(const std::string& verse_reference) {
 // API endpoint handlers
 ApiResponse MobileAPI::handlePairingRequest(const ApiRequest& request) {
     std::string device_name = parseJsonString(request.body, "device_name");
+    std::cout << "Device name: " << device_name << std::endl;
     if (device_name.empty()) {
         return errorResponse(400, "Device name is required");
     }
